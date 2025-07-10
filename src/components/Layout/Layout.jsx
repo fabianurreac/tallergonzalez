@@ -6,7 +6,7 @@ import Sidebar from './Sidebar'
 import LoadingSpinner from '../ui/LoadingSpinner'
 
 const Layout = () => {
-  const { user, loading } = useAuth()
+  const { user, loading, initialized } = useAuth() // ✅ Agregado initialized
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Cerrar sidebar en resize de pantalla
@@ -21,8 +21,9 @@ const Layout = () => {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  if (loading) {
-    return <LoadingSpinner />
+  // ✅ Verificar tanto loading como initialized para evitar bucles
+  if (loading || !initialized) {
+    return <LoadingSpinner text="Verificando autenticación..." />
   }
 
   if (!user) {

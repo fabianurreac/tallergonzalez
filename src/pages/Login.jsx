@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { supabase, USER_ROLES } from '../config/supabase'
 
 const Login = () => {
@@ -14,17 +15,14 @@ const Login = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const navigate = useNavigate()
+  const { user, loading: authLoading, initialized } = useAuth()
 
   useEffect(() => {
-    // Verificar si ya hay una sesión activa
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        navigate('/dashboard')
-      }
+    // Solo redirigir si ya hay un usuario autenticado y la auth está inicializada
+    if (initialized && user) {
+      navigate('/dashboard', { replace: true })
     }
-    checkSession()
-  }, [navigate])
+  }, [user, initialized, navigate])
 
   const handleInputChange = (e) => {
     setFormData({
@@ -36,7 +34,7 @@ const Login = () => {
   }
 
   const validateForm = () => {
-    if (!formData.email || !formData.password) {
+    if (!formData.email || (mode !== 'forgot' && !formData.password)) {
       setError('Todos los campos son obligatorios')
       return false
     }
@@ -63,14 +61,14 @@ const Login = () => {
     setError('')
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: formData.email.trim(),
         password: formData.password
       })
 
-      if (error) {
-        setError(error.message === 'Invalid login credentials' ? 
-          'Credenciales incorrectas' : error.message)
+      if (authError) {
+        setError(authError.message === 'Invalid login credentials' ? 
+          'Credenciales incorrectas' : authError.message)
         return
       }
 
@@ -83,13 +81,16 @@ const Login = () => {
           .single()
 
         if (userError) {
-          setError('Error al verificar permisos de usuario')
+          setError('Error al verificar permisos de usuario. Contacte al administrador.')
+          await supabase.auth.signOut()
           return
         }
 
-        navigate('/dashboard')
+        // La redirección se manejará automáticamente por el useEffect
+        console.log('Login exitoso para:', formData.email)
       }
     } catch (err) {
+      console.error('Error inesperado:', err)
       setError('Error inesperado al iniciar sesión')
     } finally {
       setLoading(false)
@@ -106,7 +107,7 @@ const Login = () => {
     try {
       // Registrar usuario en Supabase Auth
       const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         options: {
           data: {
@@ -127,7 +128,7 @@ const Login = () => {
           .insert([
             {
               id: data.user.id,
-              email: formData.email,
+              email: formData.email.trim(),
               rol: formData.rol
             }
           ])
@@ -146,6 +147,7 @@ const Login = () => {
         })
       }
     } catch (err) {
+      console.error('Error inesperado:', err)
       setError('Error inesperado al registrar administrador')
     } finally {
       setLoading(false)
@@ -163,7 +165,7 @@ const Login = () => {
     setError('')
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(formData.email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`
       })
 
@@ -175,6 +177,7 @@ const Login = () => {
       setSuccess('Se ha enviado un email con instrucciones para restablecer tu contraseña')
       setFormData({ ...formData, email: '', password: '' })
     } catch (err) {
+      console.error('Error inesperado:', err)
       setError('Error al enviar email de recuperación')
     } finally {
       setLoading(false)
@@ -234,6 +237,23 @@ const Login = () => {
       default:
         return 'Ingresa a tu cuenta para continuar'
     }
+  }
+
+  // Mostrar loading mientras se inicializa la autenticación
+  if (authLoading || !initialized) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-secondary-50 to-secondary-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <svg className="animate-spin h-12 w-12 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <p className="text-secondary-600 text-sm font-medium">Cargando...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -307,6 +327,7 @@ const Login = () => {
                 required
                 value={formData.email}
                 onChange={handleInputChange}
+                disabled={loading}
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="admin@taller.com"
               />
@@ -326,6 +347,7 @@ const Login = () => {
                   required
                   value={formData.password}
                   onChange={handleInputChange}
+                  disabled={loading}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                   placeholder="••••••••"
                 />
@@ -346,6 +368,7 @@ const Login = () => {
                   required
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
+                  disabled={loading}
                   className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                   placeholder="••••••••"
                 />
@@ -363,6 +386,7 @@ const Login = () => {
                   name="rol"
                   value={formData.rol}
                   onChange={handleInputChange}
+                  disabled={loading}
                   className="mt-1 block w-full px-3 py-2 border border-secondary-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 >
                   <option value="almacenista">Almacenista</option>

@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { useNavigate } from 'react-router-dom' // ✅ Agregado para navegación
 import { supabase } from '../config/supabase'
 import StatsCards from '../components/Dashboard/StatsCards'
 
 const Dashboard = () => {
   const { user, userRole } = useAuth()
+  const navigate = useNavigate() // ✅ Hook de navegación
   const [recentActivity, setRecentActivity] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false) // ✅ Estado para refresh
 
   useEffect(() => {
     fetchRecentActivity()
@@ -38,6 +41,20 @@ const Dashboard = () => {
       console.error('Error fetching recent activity:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ✅ Función mejorada para actualizar datos
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true)
+      await fetchRecentActivity()
+      // Esto también actualizará las StatsCards si tienen un método de refresh
+      window.dispatchEvent(new Event('refreshDashboard'))
+    } catch (error) {
+      console.error('Error refreshing dashboard:', error)
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -85,13 +102,23 @@ const Dashboard = () => {
         </div>
         <div className="mt-4 flex md:mt-0 md:ml-4">
           <button
-            onClick={() => window.location.reload()}
-            className="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            onClick={handleRefresh} // ✅ Función mejorada de refresh
+            disabled={refreshing}
+            className={`ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+              refreshing 
+                ? 'bg-secondary-400 cursor-not-allowed' 
+                : 'bg-primary-600 hover:bg-primary-700'
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200`}
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg 
+              className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Actualizar
+            {refreshing ? 'Actualizando...' : 'Actualizar'}
           </button>
         </div>
       </div>
@@ -159,9 +186,10 @@ const Dashboard = () => {
               Accesos Rápidos
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <a
-                href="/inventory"
-                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors"
+              {/* ✅ Convertido a button con navigate */}
+              <button
+                onClick={() => navigate('/inventory')}
+                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors text-left w-full"
               >
                 <div>
                   <span className="rounded-lg inline-flex p-3 bg-primary-50 text-primary-600 group-hover:bg-primary-100">
@@ -172,20 +200,18 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-8">
                   <h3 className="text-lg font-medium">
-                    <span className="absolute inset-0" />
                     Inventario
                   </h3>
                   <p className="mt-2 text-sm text-secondary-500">
                     Gestionar herramientas
                   </p>
                 </div>
-              </a>
+              </button>
 
-             
-
-              <a
-                href="/employees"
-                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors"
+              
+              <button
+                onClick={() => navigate('/employees')}
+                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors text-left w-full"
               >
                 <div>
                   <span className="rounded-lg inline-flex p-3 bg-blue-50 text-blue-600 group-hover:bg-blue-100">
@@ -196,18 +222,17 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-8">
                   <h3 className="text-lg font-medium">
-                    <span className="absolute inset-0" />
                     Empleados
                   </h3>
                   <p className="mt-2 text-sm text-secondary-500">
                     Gestionar personal
                   </p>
                 </div>
-              </a>
+              </button>
 
-              <a
-                href="/reports"
-                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors"
+              <button
+                onClick={() => navigate('/reports')}
+                className="group relative bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-primary-500 rounded-lg border-2 border-secondary-200 hover:border-primary-300 transition-colors text-left w-full"
               >
                 <div>
                   <span className="rounded-lg inline-flex p-3 bg-purple-50 text-purple-600 group-hover:bg-purple-100">
@@ -218,14 +243,13 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-8">
                   <h3 className="text-lg font-medium">
-                    <span className="absolute inset-0" />
                     Reportes
                   </h3>
                   <p className="mt-2 text-sm text-secondary-500">
                     Ver estadísticas
                   </p>
                 </div>
-              </a>
+              </button>
             </div>
           </div>
         </div>

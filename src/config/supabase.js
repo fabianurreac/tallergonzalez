@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Credenciales de prueba - CAMBIAR EN PRODUCCIÓN
 const supabaseUrl = 'https://fzccxxncpdjblilzhpul.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2N4eG5jcGRqYmxpbHpocHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3NzU0NTQsImV4cCI6MjA2NzM1MTQ1NH0.Xrks8EaeP0hEMhTAuBu-k83yLpsJSSj-MAeWZBxcYJw'
+
 
 // Para pruebas, usar estas credenciales temporales:
 // URL: https://xyzcompany.supabase.co  
@@ -48,10 +48,10 @@ export const TOOL_CONDITIONS = {
 // Categorías de herramientas
 export const TOOL_CATEGORIES = [
   'Limpieza',
-  'Electrica',
+  'Eléctrica',
   'Herramientas y equipos',
-  'Analisis',
-  'Proteccion',
+  'Análisis',
+  'Protección',
   'Embellecimiento',
-  'Latoneria y pintura'
+  'Latonería y pintura'
 ]

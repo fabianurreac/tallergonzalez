@@ -15,38 +15,68 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    // Obtener sesión inicial
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (session?.user) {
-        setUser(session.user)
-        await fetchUserRole(session.user.id)
-      }
-      
-      setLoading(false)
-    }
+    // Solo ejecutar una vez al inicializar
+    if (initialized) return
 
-    getInitialSession()
-
-    // Escuchar cambios en la autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
+    const initializeAuth = async () => {
+      try {
+        // Obtener sesión inicial
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error getting session:', error)
+          setUser(null)
+          setUserRole(null)
+        } else if (session?.user) {
           setUser(session.user)
+          // Obtener rol del usuario
           await fetchUserRole(session.user.id)
         } else {
           setUser(null)
           setUserRole(null)
         }
+        
+        setInitialized(true)
         setLoading(false)
+      } catch (error) {
+        console.error('Error initializing auth:', error)
+        setUser(null)
+        setUserRole(null)
+        setInitialized(true)
+        setLoading(false)
+      }
+    }
+
+    initializeAuth()
+  }, [initialized])
+
+  useEffect(() => {
+    // Escuchar cambios en la autenticación solo después de inicializar
+    if (!initialized) return
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email)
+        
+        if (event === 'SIGNED_OUT' || !session?.user) {
+          setUser(null)
+          setUserRole(null)
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            setUser(session.user)
+            await fetchUserRole(session.user.id)
+          }
+        }
       }
     )
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [initialized])
 
   const fetchUserRole = async (userId) => {
     try {
@@ -58,22 +88,35 @@ export const AuthProvider = ({ children }) => {
 
       if (error) {
         console.error('Error fetching user role:', error)
+        setUserRole(null)
         return
       }
 
-      setUserRole(data?.rol)
+      setUserRole(data?.rol || null)
     } catch (error) {
       console.error('Error fetching user role:', error)
+      setUserRole(null)
     }
   }
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut()
+      setLoading(true)
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error('Error signing out:', error)
+        throw error
+      }
+      
+      // Limpiar estado local
       setUser(null)
       setUserRole(null)
     } catch (error) {
       console.error('Error signing out:', error)
+      throw error
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -90,6 +133,7 @@ export const AuthProvider = ({ children }) => {
     user,
     userRole,
     loading,
+    initialized,
     signOut,
     isSuperAdmin,
     isAlmacenista,

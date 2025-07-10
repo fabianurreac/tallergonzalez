@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { supabase, USER_ROLES } from '../config/supabase'
+import { supabase } from '../config/supabase'
 import UserForm from '../components/Users/UserForm'
 import UserTable from '../components/Users/UserTable'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -25,16 +25,9 @@ const UserManagement = () => {
       setLoading(true)
       setError('')
 
-      // Obtener usuarios de la tabla personalizada con información de auth
       const { data, error } = await supabase
         .from('usuarios')
-        .select(`
-          id,
-          email,
-          rol,
-          created_at,
-          updated_at
-        `)
+        .select('id, email, rol, created_at, updated_at')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -42,24 +35,10 @@ const UserManagement = () => {
         return
       }
 
-      // Obtener información adicional de auth.users
-      const usersWithAuthInfo = await Promise.all(
-        data.map(async (user) => {
-          const { data: authData, error: authError } = await supabase.auth.admin.getUserById(user.id)
-          
-          return {
-            ...user,
-            email_confirmed: authData?.user?.email_confirmed_at ? true : false,
-            last_sign_in: authData?.user?.last_sign_in_at || null,
-            auth_error: authError ? true : false
-          }
-        })
-      )
-
-      setUsers(usersWithAuthInfo)
+      setUsers(data || [])
     } catch (err) {
+      console.error('Error inesperado al cargar usuarios:', err)
       setError('Error inesperado al cargar usuarios')
-      console.error('Error fetching users:', err)
     } finally {
       setLoading(false)
     }
@@ -70,13 +49,14 @@ const UserManagement = () => {
       setError('')
       setSuccess('')
 
-      // Crear usuario en Supabase Auth
-      const { data, error } = await supabase.auth.admin.createUser({
+      // Crear usuario usando signUp de Supabase
+      const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
-        email_confirm: true, // Auto-confirmar email
-        user_metadata: {
-          rol: userData.rol
+        options: {
+          data: {
+            rol: userData.rol
+          }
         }
       })
 
@@ -85,32 +65,30 @@ const UserManagement = () => {
         return false
       }
 
-      // Insertar en tabla usuarios personalizada
-      const { error: insertError } = await supabase
-        .from('usuarios')
-        .insert([
-          {
+      if (data.user) {
+        // Insertar en la tabla usuarios personalizada
+        const { error: insertError } = await supabase
+          .from('usuarios')
+          .insert([{
             id: data.user.id,
             email: userData.email,
             rol: userData.rol
-          }
-        ])
+          }])
 
-      if (insertError) {
-        // Si falla la inserción, intentar eliminar el usuario de auth
-        await supabase.auth.admin.deleteUser(data.user.id)
-        setError('Error al crear perfil de usuario: ' + insertError.message)
-        return false
+        if (insertError) {
+          setError('Usuario creado pero error al guardar rol: ' + insertError.message)
+          return false
+        }
+
+        setSuccess(`Usuario creado exitosamente. Se ha enviado un email de confirmación a ${userData.email}`)
+        setShowForm(false)
+        fetchUsers()
+        return true
       }
 
-      setSuccess('Usuario creado exitosamente')
-      setShowForm(false)
-      fetchUsers() // Recargar lista
-      return true
-
     } catch (err) {
-      setError('Error inesperado al crear usuario')
-      console.error('Error creating user:', err)
+      console.error('Error al crear usuario:', err)
+      setError('Error inesperado al crear usuario: ' + err.message)
       return false
     }
   }
@@ -120,41 +98,26 @@ const UserManagement = () => {
       setError('')
       setSuccess('')
 
-      // Actualizar en tabla usuarios personalizada
-      const { error: updateError } = await supabase
+      // Actualizar solo el rol en la tabla usuarios
+      const { error } = await supabase
         .from('usuarios')
-        .update({
-          rol: userData.rol,
-          updated_at: new Date().toISOString()
-        })
+        .update({ rol: userData.rol })
         .eq('id', userId)
 
-      if (updateError) {
-        setError('Error al actualizar usuario: ' + updateError.message)
+      if (error) {
+        setError('Error al actualizar usuario: ' + error.message)
         return false
       }
 
-      // Actualizar metadata en auth si es necesario
-      const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: {
-          rol: userData.rol
-        }
-      })
-
-      if (authError) {
-        console.warn('Error updating auth metadata:', authError)
-        // No es crítico, continuamos
-      }
-
       setSuccess('Usuario actualizado exitosamente')
-      setEditingUser(null)
       setShowForm(false)
-      fetchUsers() // Recargar lista
+      setEditingUser(null)
+      fetchUsers()
       return true
 
     } catch (err) {
-      setError('Error inesperado al actualizar usuario')
-      console.error('Error updating user:', err)
+      console.error('Error al actualizar usuario:', err)
+      setError('Error inesperado al actualizar usuario: ' + err.message)
       return false
     }
   }
@@ -168,7 +131,7 @@ const UserManagement = () => {
       setError('')
       setSuccess('')
 
-      // Eliminar de tabla usuarios personalizada primero
+      // Primero eliminar de la tabla usuarios personalizada
       const { error: deleteError } = await supabase
         .from('usuarios')
         .delete()
@@ -179,20 +142,14 @@ const UserManagement = () => {
         return
       }
 
-      // Eliminar de Supabase Auth
-      const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-
-      if (authError) {
-        setError('Error al eliminar autenticación: ' + authError.message)
-        return
-      }
-
-      setSuccess('Usuario eliminado exitosamente')
-      fetchUsers() // Recargar lista
+      // Nota: Para eliminar completamente de auth.users se necesita Service Role Key
+      // Por ahora solo eliminamos de la tabla usuarios personalizada
+      setSuccess(`Usuario ${userEmail} eliminado de la aplicación (el registro en auth permanece)`)
+      fetchUsers()
 
     } catch (err) {
-      setError('Error inesperado al eliminar usuario')
-      console.error('Error deleting user:', err)
+      console.error('Error al eliminar usuario:', err)
+      setError('Error inesperado al eliminar usuario: ' + err.message)
     }
   }
 
@@ -201,25 +158,28 @@ const UserManagement = () => {
       setError('')
       setSuccess('')
 
-      // Enviar email de reset de contraseña
       const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
         redirectTo: `${window.location.origin}/reset-password`
       })
 
       if (error) {
-        setError('Error al enviar email de reset: ' + error.message)
+        setError('Error al enviar email de recuperación: ' + error.message)
         return
       }
 
-      setSuccess(`Email de reset enviado a ${userEmail}`)
+      setSuccess(`Email de recuperación enviado a ${userEmail}`)
 
     } catch (err) {
-      setError('Error inesperado al enviar reset de contraseña')
-      console.error('Error sending password reset:', err)
+      console.error('Error al enviar email de recuperación:', err)
+      setError('Error inesperado al enviar email de recuperación: ' + err.message)
     }
   }
 
-  // Verificar permisos
+  const clearMessages = () => {
+    setError('')
+    setSuccess('')
+  }
+
   if (!isSuperAdmin()) {
     return (
       <div className="text-center py-12">
@@ -242,10 +202,9 @@ const UserManagement = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="md:flex md:items-center md:justify-between">
         <div className="flex-1 min-w-0">
-          <h2 className="text-2xl font-bold leading-7 text-secondary-900 sm:text-3xl sm:truncate">
+          <h2 className="text-2xl font-bold text-secondary-900 sm:text-3xl sm:truncate">
             Gestión de Usuarios
           </h2>
           <p className="mt-1 text-sm text-secondary-500">
@@ -254,10 +213,13 @@ const UserManagement = () => {
         </div>
         <div className="mt-4 flex md:mt-0 md:ml-4">
           <button
-            onClick={() => fetchUsers()}
-            className="inline-flex items-center px-4 py-2 border border-secondary-300 rounded-md shadow-sm text-sm font-medium text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            onClick={() => {
+              clearMessages()
+              fetchUsers()
+            }}
+            className="px-4 py-2 border border-secondary-300 rounded-md text-sm font-medium bg-white text-secondary-700 hover:bg-secondary-50 transition-colors"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Actualizar
@@ -266,10 +228,11 @@ const UserManagement = () => {
             onClick={() => {
               setEditingUser(null)
               setShowForm(true)
+              clearMessages()
             }}
-            className="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="ml-3 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             Nuevo Usuario
@@ -277,7 +240,6 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Mensajes de error y éxito */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex">
@@ -291,14 +253,16 @@ const UserManagement = () => {
               <div className="mt-2 text-sm text-red-700">{error}</div>
             </div>
             <div className="ml-auto pl-3">
-              <button
-                onClick={() => setError('')}
-                className="inline-flex text-red-400 hover:text-red-600"
-              >
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
+              <div className="-mx-1.5 -my-1.5">
+                <button
+                  onClick={clearMessages}
+                  className="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -317,46 +281,47 @@ const UserManagement = () => {
               <div className="mt-2 text-sm text-green-700">{success}</div>
             </div>
             <div className="ml-auto pl-3">
-              <button
-                onClick={() => setSuccess('')}
-                className="inline-flex text-green-400 hover:text-green-600"
-              >
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
+              <div className="-mx-1.5 -my-1.5">
+                <button
+                  onClick={clearMessages}
+                  className="inline-flex bg-green-50 rounded-md p-1.5 text-green-500 hover:bg-green-100"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Formulario de usuario */}
       {showForm && (
         <UserForm
           user={editingUser}
-          onSubmit={editingUser ? 
-            (userData) => handleUpdateUser(editingUser.id, userData) : 
-            handleCreateUser
+          onSubmit={editingUser
+            ? (data) => handleUpdateUser(editingUser.id, data)
+            : handleCreateUser
           }
           onCancel={() => {
-            setShowForm(false)
             setEditingUser(null)
+            setShowForm(false)
+            clearMessages()
           }}
         />
       )}
 
-      {/* Tabla de usuarios */}
       <UserTable
         users={users}
         onEdit={(user) => {
           setEditingUser(user)
           setShowForm(true)
+          clearMessages()
         }}
         onDelete={handleDeleteUser}
         onResetPassword={handleResetPassword}
       />
 
-      {/* Estado vacío */}
       {users.length === 0 && !loading && (
         <div className="text-center py-12">
           <svg className="mx-auto h-12 w-12 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -369,11 +334,8 @@ const UserManagement = () => {
           <div className="mt-6">
             <button
               onClick={() => setShowForm(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
             >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
               Crear Usuario
             </button>
           </div>

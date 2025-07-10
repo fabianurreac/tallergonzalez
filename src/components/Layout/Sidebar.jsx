@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
-  const { hasPermission, userRole } = useAuth()
+  const { hasPermission, userRole, user } = useAuth() // ✅ Agregado user
 
   const navigation = [
     {
@@ -89,8 +89,15 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     }
   ]
 
-  // Filtrar navegación según permisos
-  const filteredNavigation = navigation.filter(item => hasPermission(item.permission))
+  // ✅ Filtrar navegación según permisos - Solo si hay usuario autenticado
+  const filteredNavigation = user ? navigation.filter(item => hasPermission(item.permission)) : []
+
+  // ✅ Función mejorada para manejar clicks en navegación
+  const handleNavItemClick = () => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -125,33 +132,40 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-4 space-y-1">
-        {filteredNavigation.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            className={({ isActive }) =>
-              `group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
-                isActive
-                  ? 'bg-primary-100 text-primary-900 border-r-2 border-primary-500'
-                  : 'text-secondary-700 hover:bg-secondary-100 hover:text-secondary-900'
-              }`
-            }
-            onClick={() => {
-              if (window.innerWidth < 1024) {
-                setSidebarOpen(false)
+        {/* ✅ Verificación mejorada de navegación */}
+        {filteredNavigation.length > 0 ? (
+          filteredNavigation.map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              className={({ isActive }) =>
+                `group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                  isActive
+                    ? 'bg-primary-100 text-primary-900 border-r-2 border-primary-500'
+                    : 'text-secondary-700 hover:bg-secondary-100 hover:text-secondary-900'
+                }`
               }
-            }}
-          >
-            <span className="mr-3">{item.icon}</span>
-            {item.name}
-          </NavLink>
-        ))}
+              onClick={handleNavItemClick} // ✅ Uso de la función mejorada
+            >
+              <span className="mr-3">{item.icon}</span>
+              {item.name}
+            </NavLink>
+          ))
+        ) : (
+          // ✅ Estado de carga cuando no hay navegación
+          <div className="px-3 py-2 text-sm text-secondary-500">
+            Cargando menú...
+          </div>
+        )}
       </nav>
 
       {/* Footer del sidebar */}
       <div className="p-4 border-t border-secondary-200">
         <div className="text-xs text-secondary-500 text-center">
-          <p className="font-medium">Rol: {userRole === 'superadmin' ? 'Super Admin' : 'Almacenista'}</p>
+          {/* ✅ Verificación mejorada de userRole */}
+          <p className="font-medium">
+            Rol: {userRole === 'superadmin' ? 'Super Admin' : userRole === 'almacenista' ? 'Almacenista' : 'Cargando...'}
+          </p>
           <p className="mt-1">v1.0.0</p>
         </div>
       </div>
