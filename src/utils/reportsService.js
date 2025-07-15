@@ -1,7 +1,7 @@
 import { supabase } from '../config/supabase'
 
 export const reportsService = {
-  // Estadísticas generales del sistema
+  // Obtener estadísticas generales
   async getGeneralStats() {
     try {
       const [
@@ -26,12 +26,18 @@ export const reportsService = {
         alertsCount: alertsCount || 0
       }
     } catch (error) {
-      console.error('Error fetching general stats:', error)
-      return null
+      console.error('Error getting general stats:', error)
+      return {
+        totalTools: 0,
+        totalEmployees: 0,
+        totalReservations: 0,
+        activeReservations: 0,
+        alertsCount: 0
+      }
     }
   },
 
-  // Top 10 herramientas más usadas
+  // Obtener top herramientas más usadas
   async getTopTools(limit = 10) {
     try {
       const { data, error } = await supabase
@@ -43,12 +49,12 @@ export const reportsService = {
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching top tools:', error)
+      console.error('Error getting top tools:', error)
       return []
     }
   },
 
-  // Top 10 empleados más activos
+  // Obtener top empleados más activos
   async getTopEmployees(limit = 10) {
     try {
       const { data, error } = await supabase
@@ -60,12 +66,12 @@ export const reportsService = {
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching top employees:', error)
+      console.error('Error getting top employees:', error)
       return []
     }
   },
 
-  // Distribución de herramientas por categoría
+  // Obtener distribución de herramientas por categoría
   async getToolsByCategory() {
     try {
       const { data, error } = await supabase
@@ -75,7 +81,7 @@ export const reportsService = {
       if (error) throw error
 
       const categoryCount = {}
-      data.forEach(tool => {
+      data?.forEach(tool => {
         categoryCount[tool.categoria] = (categoryCount[tool.categoria] || 0) + 1
       })
 
@@ -84,12 +90,12 @@ export const reportsService = {
         count
       }))
     } catch (error) {
-      console.error('Error fetching tools by category:', error)
+      console.error('Error getting tools by category:', error)
       return []
     }
   },
 
-  // Estado de herramientas (disponible, reservada)
+  // Obtener estado de herramientas
   async getToolsStatus() {
     try {
       const { data, error } = await supabase
@@ -98,26 +104,22 @@ export const reportsService = {
 
       if (error) throw error
 
-      const statusCount = {
-        disponible: 0,
-        reservada: 0
-      }
-
-      data.forEach(tool => {
+      const statusCount = {}
+      data?.forEach(tool => {
         statusCount[tool.estado] = (statusCount[tool.estado] || 0) + 1
       })
 
-      return [
-        { estado: 'Disponible', count: statusCount.disponible },
-        { estado: 'Reservada', count: statusCount.reservada }
-      ]
+      return Object.entries(statusCount).map(([estado, count]) => ({
+        estado,
+        count
+      }))
     } catch (error) {
-      console.error('Error fetching tools status:', error)
+      console.error('Error getting tools status:', error)
       return []
     }
   },
 
-  // Condición de herramientas (bueno, malo, deterioro)
+  // Obtener condición de herramientas
   async getToolsCondition() {
     try {
       const { data, error } = await supabase
@@ -126,71 +128,61 @@ export const reportsService = {
 
       if (error) throw error
 
-      const conditionCount = {
-        bueno: 0,
-        malo: 0,
-        deterioro: 0
-      }
-
-      data.forEach(tool => {
+      const conditionCount = {}
+      data?.forEach(tool => {
         conditionCount[tool.condicion] = (conditionCount[tool.condicion] || 0) + 1
       })
 
-      return [
-        { condicion: 'Bueno', count: conditionCount.bueno },
-        { condicion: 'Malo', count: conditionCount.malo },
-        { condicion: 'Deterioro', count: conditionCount.deterioro }
-      ]
-    } catch (error) {
-      console.error('Error fetching tools condition:', error)
-      return []
-    }
-  },
-
-  // Reservas por mes (últimos 12 meses)
-  async getReservationsByMonth() {
-    try {
-      const { data, error } = await supabase
-        .from('reservas')
-        .select('fecha_reserva')
-        .gte('fecha_reserva', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
-
-      if (error) throw error
-
-      const monthlyData = {}
-      const months = [
-        'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-      ]
-
-      // Inicializar últimos 12 meses
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date()
-        date.setMonth(date.getMonth() - i)
-        const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`
-        monthlyData[monthKey] = 0
-      }
-
-      // Contar reservas por mes
-      data.forEach(reservation => {
-        const date = new Date(reservation.fecha_reserva)
-        const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`
-        if (monthlyData.hasOwnProperty(monthKey)) {
-          monthlyData[monthKey]++
-        }
-      })
-
-      return Object.entries(monthlyData).map(([month, count]) => ({
-        month,
+      return Object.entries(conditionCount).map(([condicion, count]) => ({
+        condicion,
         count
       }))
     } catch (error) {
-      console.error('Error fetching reservations by month:', error)
+      console.error('Error getting tools condition:', error)
       return []
     }
   },
 
-  // Promedio de calificaciones por herramienta
+  // Obtener reservas por mes (últimos 12 meses)
+  async getReservationsByMonth() {
+    try {
+      const twelveMonthsAgo = new Date()
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
+
+      const { data, error } = await supabase
+        .from('reservas')
+        .select('fecha_reserva')
+        .gte('fecha_reserva', twelveMonthsAgo.toISOString())
+        .order('fecha_reserva', { ascending: true })
+
+      if (error) throw error
+
+      // Procesar datos por mes
+      const monthlyData = []
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date()
+        date.setMonth(date.getMonth() - i)
+        const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`
+        const monthName = date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
+        
+        const count = data?.filter(item => 
+          item.fecha_reserva.startsWith(monthKey)
+        ).length || 0
+        
+        monthlyData.push({
+          month: monthName,
+          count
+        })
+      }
+
+      return monthlyData
+    } catch (error) {
+      console.error('Error getting reservations by month:', error)
+      return []
+    }
+  },
+
+  // Obtener calificaciones promedio
   async getAverageRatings() {
     try {
       const { data, error } = await supabase
@@ -202,33 +194,30 @@ export const reportsService = {
 
       if (error) throw error
 
-      const ratingsData = {}
-      data.forEach(rating => {
+      const ratings = {}
+      data?.forEach(rating => {
         const toolName = rating.herramientas?.nombre
         if (toolName) {
-          if (!ratingsData[toolName]) {
-            ratingsData[toolName] = { total: 0, count: 0 }
+          if (!ratings[toolName]) {
+            ratings[toolName] = { total: 0, count: 0 }
           }
-          ratingsData[toolName].total += rating.calificacion
-          ratingsData[toolName].count += 1
+          ratings[toolName].total += rating.calificacion
+          ratings[toolName].count += 1
         }
       })
 
-      return Object.entries(ratingsData)
-        .map(([toolName, data]) => ({
-          herramienta: toolName,
-          promedio: (data.total / data.count).toFixed(1),
-          totalCalificaciones: data.count
-        }))
-        .sort((a, b) => b.promedio - a.promedio)
-        .slice(0, 10)
+      return Object.entries(ratings).map(([tool, data]) => ({
+        tool,
+        averageRating: data.count > 0 ? (data.total / data.count).toFixed(1) : 0,
+        totalRatings: data.count
+      })).sort((a, b) => b.averageRating - a.averageRating)
     } catch (error) {
-      console.error('Error fetching average ratings:', error)
+      console.error('Error getting average ratings:', error)
       return []
     }
   },
 
-  // Alertas por tipo de motivo
+  // Obtener alertas por tipo
   async getAlertsByType() {
     try {
       const { data, error } = await supabase
@@ -238,8 +227,20 @@ export const reportsService = {
       if (error) throw error
 
       const alertTypes = {}
-      data.forEach(alert => {
-        alertTypes[alert.motivo] = (alertTypes[alert.motivo] || 0) + 1
+      data?.forEach(alert => {
+        // Categorizar alertas por palabras clave en el motivo
+        let tipo = 'Otros'
+        if (alert.motivo.toLowerCase().includes('deterioro')) {
+          tipo = 'Deterioro'
+        } else if (alert.motivo.toLowerCase().includes('reserva')) {
+          tipo = 'Reservas'
+        } else if (alert.motivo.toLowerCase().includes('devolucion')) {
+          tipo = 'Devoluciones'
+        } else if (alert.motivo.toLowerCase().includes('mantenimiento')) {
+          tipo = 'Mantenimiento'
+        }
+
+        alertTypes[tipo] = (alertTypes[tipo] || 0) + 1
       })
 
       return Object.entries(alertTypes).map(([tipo, count]) => ({
@@ -247,12 +248,12 @@ export const reportsService = {
         count
       }))
     } catch (error) {
-      console.error('Error fetching alerts by type:', error)
+      console.error('Error getting alerts by type:', error)
       return []
     }
   },
 
-  // Estadísticas de devoluciones (a tiempo vs tarde)
+  // Obtener estadísticas de devoluciones
   async getReturnStats() {
     try {
       const { data, error } = await supabase
@@ -262,31 +263,39 @@ export const reportsService = {
 
       if (error) throw error
 
-      let onTime = 0
-      let late = 0
+      const stats = {
+        'A Tiempo': 0,
+        'Tarde': 0,
+        'Temprano': 0
+      }
 
-      data.forEach(reservation => {
-        const estimatedDate = new Date(reservation.fecha_devolucion_estimada)
-        const actualDate = new Date(reservation.fecha_devolucion_real)
-        
-        if (actualDate <= estimatedDate) {
-          onTime++
+      data?.forEach(reserva => {
+        const estimada = new Date(reserva.fecha_devolucion_estimada)
+        const real = new Date(reserva.fecha_devolucion_real)
+
+        if (real <= estimada) {
+          const diffDays = Math.ceil((estimada - real) / (1000 * 60 * 60 * 24))
+          if (diffDays === 0) {
+            stats['A Tiempo']++
+          } else {
+            stats['Temprano']++
+          }
         } else {
-          late++
+          stats['Tarde']++
         }
       })
 
-      return [
-        { categoria: 'A tiempo', count: onTime },
-        { categoria: 'Tarde', count: late }
-      ]
+      return Object.entries(stats).map(([categoria, count]) => ({
+        categoria,
+        count
+      }))
     } catch (error) {
-      console.error('Error fetching return stats:', error)
+      console.error('Error getting return stats:', error)
       return []
     }
   },
 
-  // Generar reporte completo en formato PDF (datos para exportar)
+  // Obtener reporte completo
   async getCompleteReport() {
     try {
       const [
@@ -302,8 +311,8 @@ export const reportsService = {
         returnStats
       ] = await Promise.all([
         this.getGeneralStats(),
-        this.getTopTools(),
-        this.getTopEmployees(),
+        this.getTopTools(10),
+        this.getTopEmployees(10),
         this.getToolsByCategory(),
         this.getToolsStatus(),
         this.getToolsCondition(),
@@ -327,8 +336,21 @@ export const reportsService = {
         generatedAt: new Date().toISOString()
       }
     } catch (error) {
-      console.error('Error generating complete report:', error)
-      return null
+      console.error('Error getting complete report:', error)
+      return {
+        generalStats: null,
+        topTools: [],
+        topEmployees: [],
+        toolsByCategory: [],
+        toolsStatus: [],
+        toolsCondition: [],
+        reservationsByMonth: [],
+        averageRatings: [],
+        alertsByType: [],
+        returnStats: []
+      }
     }
   }
 }
+
+export default reportsService

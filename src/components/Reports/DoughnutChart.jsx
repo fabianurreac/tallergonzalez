@@ -1,88 +1,153 @@
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
-import { doughnutChartOptions, generateColors } from '../../utils/chartConfig'
 
-const DoughnutChart = ({ 
-  data, 
-  title = "Gráfica de Dona",
-  labelKey = "label",
-  valueKey = "value",
-  height = 400,
-  showTotal = true,
-  centerText = null
-}) => {
+ChartJS.register(ArcElement, Tooltip, Legend)
+
+const DoughnutChart = ({ data, title, labelKey, valueKey }) => {
+  const colors = [
+    '#DC2626', // Rojo
+    '#7C3AED', // Púrpura
+    '#059669', // Verde
+    '#D97706', // Naranja
+    '#DC2626', // Azul
+    '#EC4899', // Rosa
+    '#6B7280', // Gris
+  ]
+
+  const chartData = {
+    labels: data.map(item => item[labelKey] || 'Sin datos'),
+    datasets: [
+      {
+        data: data.map(item => item[valueKey] || 0),
+        backgroundColor: colors.slice(0, data.length),
+        borderColor: colors.slice(0, data.length).map(color => color),
+        borderWidth: 2,
+        hoverOffset: 8,
+        cutout: '60%',
+      },
+    ],
+  }
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          font: {
+            size: 12,
+            family: 'Inter, sans-serif'
+          },
+          generateLabels: function(chart) {
+            const data = chart.data
+            if (data.labels.length && data.datasets.length) {
+              return data.labels.map((label, i) => {
+                const dataset = data.datasets[0]
+                const value = dataset.data[i]
+                const total = dataset.data.reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+                
+                return {
+                  text: `${label}: ${percentage}%`,
+                  fillStyle: dataset.backgroundColor[i],
+                  strokeStyle: dataset.borderColor[i],
+                  lineWidth: dataset.borderWidth,
+                  pointStyle: 'circle',
+                  hidden: false,
+                  index: i
+                }
+              })
+            }
+            return []
+          }
+        }
+      },
+      title: {
+        display: true,
+        text: title,
+        font: {
+          size: 16,
+          weight: 'bold',
+          family: 'Inter, sans-serif'
+        },
+        color: '#374151',
+        padding: {
+          top: 10,
+          bottom: 30
+        }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleFont: {
+          size: 14,
+          family: 'Inter, sans-serif'
+        },
+        bodyFont: {
+          size: 12,
+          family: 'Inter, sans-serif'
+        },
+        cornerRadius: 8,
+        displayColors: true,
+        callbacks: {
+          label: function(context) {
+            const label = context.label || ''
+            const value = context.parsed
+            const total = context.dataset.data.reduce((a, b) => a + b, 0)
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+            return `${label}: ${value} (${percentage}%)`
+          }
+        }
+      }
+    },
+    animation: {
+      animateRotate: true,
+      animateScale: true,
+      duration: 1000,
+      easing: 'easeOutQuart'
+    },
+    interaction: {
+      intersect: false,
+      mode: 'index'
+    }
+  }
+
+  // Calcular total para mostrar en el centro
+  const total = data.reduce((sum, item) => sum + (item[valueKey] || 0), 0)
+
   if (!data || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 bg-secondary-50 rounded-lg">
+      <div className="flex items-center justify-center h-64 bg-secondary-50 rounded-lg border-2 border-dashed border-secondary-300">
         <div className="text-center">
           <svg className="mx-auto h-12 w-12 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-secondary-900">Sin datos</h3>
-          <p className="mt-1 text-sm text-secondary-500">No hay información disponible para mostrar.</p>
+          <p className="mt-1 text-sm text-secondary-500">No hay información para mostrar en el gráfico.</p>
         </div>
       </div>
     )
   }
 
-  const labels = data.map(item => item[labelKey])
-  const values = data.map(item => item[valueKey])
-  const total = values.reduce((sum, value) => sum + value, 0)
-  const colors = generateColors(data.length)
-
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        data: values,
-        backgroundColor: colors,
-        borderColor: '#ffffff',
-        borderWidth: 3,
-        hoverBorderWidth: 4,
-        hoverOffset: 10
-      }
-    ]
-  }
-
-  const options = {
-    ...doughnutChartOptions,
-    plugins: {
-      ...doughnutChartOptions.plugins,
-      title: {
-        display: !!title,
-        text: title,
-        font: {
-          family: 'Inter',
-          size: 16,
-          weight: 'bold'
-        },
-        color: '#374151',
-        padding: 20
-      }
-    }
-  }
-
   return (
-    <div className="relative w-full">
-      <div style={{ height: `${height}px` }} className="w-full">
-        <Doughnut data={chartData} options={options} />
-      </div>
+    <div className="h-64 w-full relative">
+      <Doughnut data={chartData} options={options} />
       
-      {/* Centro de la dona con información adicional */}
-      {(showTotal || centerText) && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            {showTotal && (
-              <>
-                <div className="text-2xl font-bold text-secondary-900">{total}</div>
-                <div className="text-sm text-secondary-500">Total</div>
-              </>
-            )}
-            {centerText && (
-              <div className="text-lg font-semibold text-secondary-700">{centerText}</div>
-            )}
-          </div>
+      {/* Número total en el centro */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-secondary-900">{total}</div>
+          <div className="text-sm text-secondary-600">Total</div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

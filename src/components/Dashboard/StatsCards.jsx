@@ -21,26 +21,43 @@ const StatsCards = () => {
       setLoading(true)
       
       // Estadísticas de herramientas
-      const { data: toolsData } = await supabase
+      const { data: toolsData, error: toolsError } = await supabase
         .from('herramientas')
         .select('estado')
 
+      if (toolsError) {
+        console.error('Error fetching tools:', toolsError)
+      }
+
       // Estadísticas de empleados
-      const { count: employeesCount } = await supabase
+      const { count: employeesCount, error: employeesError } = await supabase
         .from('empleados')
         .select('*', { count: 'exact', head: true })
+        .eq('activo', true)
+
+      if (employeesError) {
+        console.error('Error fetching employees:', employeesError)
+      }
 
       // Reservas activas
-      const { count: activeReservationsCount } = await supabase
+      const { count: activeReservationsCount, error: reservationsError } = await supabase
         .from('reservas')
         .select('*', { count: 'exact', head: true })
         .eq('estado', 'reservada')
 
+      if (reservationsError) {
+        console.error('Error fetching reservations:', reservationsError)
+      }
+
       // Alertas sin leer
-      const { count: alertsCount } = await supabase
+      const { count: alertsCount, error: alertsError } = await supabase
         .from('alertas')
         .select('*', { count: 'exact', head: true })
         .eq('leida', false)
+
+      if (alertsError) {
+        console.error('Error fetching alerts:', alertsError)
+      }
 
       // Procesar estadísticas de herramientas
       const totalTools = toolsData?.length || 0
@@ -72,7 +89,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
       ),
-      color: 'bg-blue-500',
+      color: 'text-blue-600',
       bgColor: 'bg-blue-50'
     },
     {
@@ -83,7 +100,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
-      color: 'bg-green-500',
+      color: 'text-green-600',
       bgColor: 'bg-green-50'
     },
     {
@@ -94,7 +111,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
       ),
-      color: 'bg-yellow-500',
+      color: 'text-yellow-600',
       bgColor: 'bg-yellow-50'
     },
     {
@@ -105,7 +122,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
         </svg>
       ),
-      color: 'bg-purple-500',
+      color: 'text-purple-600',
       bgColor: 'bg-purple-50'
     },
     {
@@ -116,7 +133,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       ),
-      color: 'bg-indigo-500',
+      color: 'text-indigo-600',
       bgColor: 'bg-indigo-50'
     },
     {
@@ -127,7 +144,7 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.854-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
         </svg>
       ),
-      color: 'bg-red-500',
+      color: 'text-red-600',
       bgColor: 'bg-red-50'
     }
   ]
@@ -162,7 +179,7 @@ const StatsCards = () => {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className={`w-8 h-8 ${stat.bgColor} rounded-md flex items-center justify-center`}>
-                  <div className={`${stat.color.replace('bg-', 'text-')} text-white`}>
+                  <div className={stat.color}>
                     {stat.icon}
                   </div>
                 </div>

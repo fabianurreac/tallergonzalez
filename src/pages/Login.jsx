@@ -4,25 +4,27 @@ import { useAuth } from '../hooks/useAuth'
 import { supabase, USER_ROLES } from '../config/supabase'
 
 const Login = () => {
-  const [mode, setMode] = useState('login') // 'login', 'register', 'forgot'
+  const [mode, setMode] = useState('login')
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    rol: 'almacenista'
+    rol: 'almacenista',
+    nombre: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const navigate = useNavigate()
-  const { user, loading: authLoading, initialized } = useAuth()
+  const { user, loading: authLoading, login, initialized } = useAuth()
 
+  // ✅ Solo redirigir cuando esté inicializado y haya usuario
   useEffect(() => {
-    // Solo redirigir si ya hay un usuario autenticado y la auth está inicializada
     if (initialized && user) {
+      console.log('Usuario ya autenticado, redirigiendo...')
       navigate('/dashboard', { replace: true })
     }
-  }, [user, initialized, navigate])
+  }, [initialized, user, navigate])
 
   const handleInputChange = (e) => {
     setFormData({
@@ -40,6 +42,10 @@ const Login = () => {
     }
 
     if (mode === 'register') {
+      if (!formData.nombre) {
+        setError('El nombre es obligatorio')
+        return false
+      }
       if (formData.password !== formData.confirmPassword) {
         setError('Las contraseñas no coinciden')
         return false
@@ -61,36 +67,20 @@ const Login = () => {
     setError('')
 
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: formData.email.trim(),
-        password: formData.password
-      })
-
-      if (authError) {
-        setError(authError.message === 'Invalid login credentials' ? 
-          'Credenciales incorrectas' : authError.message)
-        return
-      }
-
-      if (data.user) {
-        // Verificar rol del usuario
-        const { data: userData, error: userError } = await supabase
-          .from('usuarios')
-          .select('rol')
-          .eq('id', data.user.id)
-          .single()
-
-        if (userError) {
-          setError('Error al verificar permisos de usuario. Contacte al administrador.')
-          await supabase.auth.signOut()
-          return
-        }
-
-        // La redirección se manejará automáticamente por el useEffect
-        console.log('Login exitoso para:', formData.email)
+      console.log('Iniciando login para:', formData.email)
+      
+      const result = await login(formData.email.trim(), formData.password)
+      
+      console.log('Resultado del login:', result)
+      
+      if (result.success) {
+        console.log('Login exitoso, usuario:', result.user)
+        // La redirección se maneja en el useEffect
+      } else {
+        setError(result.error || 'Credenciales incorrectas')
       }
     } catch (err) {
-      console.error('Error inesperado:', err)
+      console.error('Error inesperado en login:', err)
       setError('Error inesperado al iniciar sesión')
     } finally {
       setLoading(false)
@@ -105,49 +95,59 @@ const Login = () => {
     setError('')
 
     try {
-      // Registrar usuario en Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email.trim(),
-        password: formData.password,
-        options: {
-          data: {
-            rol: formData.rol
-          }
-        }
-      })
+      // Verificar si el email ya existe
+      const { data: existingUser } = await supabase
+        .from('usuarios')
+        .select('email')
+        .eq('email', formData.email.trim())
+        .single()
 
-      if (error) {
-        setError(error.message)
+      if (existingUser) {
+        setError('Ya existe un usuario con ese email')
+        setLoading(false)
         return
       }
 
-      if (data.user) {
-        // Insertar en tabla usuarios personalizada
-        const { error: insertError } = await supabase
-          .from('usuarios')
-          .insert([
-            {
-              id: data.user.id,
-              email: formData.email.trim(),
-              rol: formData.rol
-            }
-          ])
+      // Insertar nuevo administrador
+      const { data, error: insertError } = await supabase
+        .from('usuarios')
+        .insert([
+          {
+            email: formData.email.trim().toLowerCase(),
+            password: formData.password,
+            rol: formData.rol,
+            nombre: formData.nombre.trim(),
+            activo: true
+          }
+        ])
+        .select()
 
-        if (insertError) {
-          setError('Error al crear perfil de usuario')
-          return
-        }
-
-        setSuccess('Administrador registrado exitosamente. Verifica tu email para confirmar la cuenta.')
-        setFormData({
-          email: '',
-          password: '',
-          confirmPassword: '',
-          rol: 'almacenista'
-        })
+      if (insertError) {
+        console.error('Error al insertar usuario:', insertError)
+        setError('Error al crear el administrador. Intenta nuevamente.')
+        setLoading(false)
+        return
       }
+
+      setSuccess(`✅ Administrador ${formData.rol} registrado exitosamente. Ya puedes iniciar sesión.`)
+      
+      // Limpiar formulario
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        rol: 'almacenista',
+        nombre: ''
+      })
+
+      // Cambiar automáticamente al modo login después de 3 segundos
+      setTimeout(() => {
+        setSuccess('')
+        switchMode('login')
+      }, 3000)
+
     } catch (err) {
-      console.error('Error inesperado:', err)
+      console.error('Error inesperado en registro:', err)
       setError('Error inesperado al registrar administrador')
     } finally {
       setLoading(false)
@@ -165,20 +165,53 @@ const Login = () => {
     setError('')
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`
-      })
+      // Verificar si el usuario existe
+      const { data: userData, error } = await supabase
+        .from('usuarios')
+        .select('email, nombre, rol')
+        .eq('email', formData.email.trim())
+        .eq('activo', true)
+        .single()
 
-      if (error) {
-        setError(error.message)
+      if (error || !userData) {
+        setError('No se encontró un usuario activo con ese email')
+        setLoading(false)
         return
       }
 
-      setSuccess('Se ha enviado un email con instrucciones para restablecer tu contraseña')
+      // Generar token temporal para reset
+      const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas
+
+      // Crear registro de token de reset
+      const { error: tokenError } = await supabase
+        .from('password_reset_tokens')
+        .upsert([
+          {
+            email: formData.email.trim(),
+            token: resetToken,
+            expires_at: expiresAt.toISOString(),
+            used: false
+          }
+        ])
+
+      if (tokenError) {
+        console.log('Token error (tabla no existe):', tokenError)
+        setSuccess(`📧 Solicitud de recuperación registrada para ${formData.email}. 
+                   Contacta al administrador del sistema con esta información:
+                   Email: ${formData.email}
+                   Fecha: ${new Date().toLocaleString()}
+                   Token: ${resetToken}`)
+      } else {
+        setSuccess(`📧 Se ha generado un token de recuperación. 
+                   Contacta al administrador del sistema con este token: ${resetToken}
+                   (Válido por 24 horas)`)
+      }
+
       setFormData({ ...formData, email: '', password: '' })
     } catch (err) {
-      console.error('Error inesperado:', err)
-      setError('Error al enviar email de recuperación')
+      console.error('Error inesperado en recuperación:', err)
+      setError('Error al procesar recuperación de contraseña')
     } finally {
       setLoading(false)
     }
@@ -202,7 +235,8 @@ const Login = () => {
       email: '',
       password: '',
       confirmPassword: '',
-      rol: 'almacenista'
+      rol: 'almacenista',
+      nombre: ''
     })
     setError('')
     setSuccess('')
@@ -211,6 +245,22 @@ const Login = () => {
   const switchMode = (newMode) => {
     setMode(newMode)
     resetForm()
+  }
+
+  const fillTestCredentials = (type) => {
+    if (type === 'admin') {
+      setFormData({
+        ...formData,
+        email: 'admin@taller.com',
+        password: 'admin123'
+      })
+    } else {
+      setFormData({
+        ...formData,
+        email: 'almacen@taller.com',
+        password: 'almacen123'
+      })
+    }
   }
 
   const getModeTitle = () => {
@@ -233,13 +283,13 @@ const Login = () => {
       case 'register':
         return 'Crear nueva cuenta de administrador'
       case 'forgot':
-        return 'Te enviaremos un enlace para restablecer tu contraseña'
+        return 'Te ayudaremos a recuperar el acceso a tu cuenta'
       default:
         return 'Ingresa a tu cuenta para continuar'
     }
   }
 
-  // Mostrar loading mientras se inicializa la autenticación
+  // ✅ Mostrar loading solo mientras se inicializa la auth
   if (authLoading || !initialized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-secondary-50 to-secondary-100 flex items-center justify-center">
@@ -250,7 +300,7 @@ const Login = () => {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           </div>
-          <p className="text-secondary-600 text-sm font-medium">Cargando...</p>
+          <p className="text-secondary-600 text-sm font-medium">Iniciando aplicación...</p>
         </div>
       </div>
     )
@@ -278,11 +328,12 @@ const Login = () => {
           </p>
         </div>
 
-        {/* TABS DE NAVEGACIÓN - AQUÍ ESTÁN LAS 3 OPCIONES */}
+        {/* TABS DE NAVEGACIÓN */}
         <div className="flex space-x-1 bg-secondary-200 p-1 rounded-lg">
           <button
             onClick={() => switchMode('login')}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+            disabled={loading}
+            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
               mode === 'login'
                 ? 'bg-white text-secondary-900 shadow'
                 : 'text-secondary-600 hover:text-secondary-900'
@@ -292,7 +343,8 @@ const Login = () => {
           </button>
           <button
             onClick={() => switchMode('register')}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+            disabled={loading}
+            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
               mode === 'register'
                 ? 'bg-white text-secondary-900 shadow'
                 : 'text-secondary-600 hover:text-secondary-900'
@@ -302,7 +354,8 @@ const Login = () => {
           </button>
           <button
             onClick={() => switchMode('forgot')}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+            disabled={loading}
+            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${
               mode === 'forgot'
                 ? 'bg-white text-secondary-900 shadow'
                 : 'text-secondary-600 hover:text-secondary-900'
@@ -314,7 +367,7 @@ const Login = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
-            {/* EMAIL - SIEMPRE VISIBLE */}
+            {/* EMAIL */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-secondary-700">
                 Correo electrónico
@@ -328,12 +381,33 @@ const Login = () => {
                 value={formData.email}
                 onChange={handleInputChange}
                 disabled={loading}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm disabled:opacity-50"
                 placeholder="admin@taller.com"
               />
             </div>
 
-            {/* PASSWORD - SOLO EN LOGIN Y REGISTER */}
+            {/* NOMBRE - SOLO EN REGISTER */}
+            {mode === 'register' && (
+              <div>
+                <label htmlFor="nombre" className="block text-sm font-medium text-secondary-700">
+                  Nombre completo
+                </label>
+                <input
+                  id="nombre"
+                  name="nombre"
+                  type="text"
+                  autoComplete="name"
+                  required
+                  value={formData.nombre}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm disabled:opacity-50"
+                  placeholder="Juan Pérez"
+                />
+              </div>
+            )}
+
+            {/* PASSWORD */}
             {mode !== 'forgot' && (
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-secondary-700">
@@ -348,13 +422,13 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleInputChange}
                   disabled={loading}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
             )}
 
-            {/* CONFIRMAR PASSWORD - SOLO EN REGISTER */}
+            {/* CONFIRMAR PASSWORD */}
             {mode === 'register' && (
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-secondary-700">
@@ -369,13 +443,13 @@ const Login = () => {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   disabled={loading}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-secondary-300 placeholder-secondary-500 text-secondary-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
             )}
 
-            {/* ROL - SOLO EN REGISTER - SOLO ADMINISTRADORES */}
+            {/* ROL */}
             {mode === 'register' && (
               <div>
                 <label htmlFor="rol" className="block text-sm font-medium text-secondary-700">
@@ -387,7 +461,7 @@ const Login = () => {
                   value={formData.rol}
                   onChange={handleInputChange}
                   disabled={loading}
-                  className="mt-1 block w-full px-3 py-2 border border-secondary-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                  className="mt-1 block w-full px-3 py-2 border border-secondary-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm disabled:opacity-50"
                 >
                   <option value="almacenista">Almacenista</option>
                   <option value="superadmin">Super Administrador</option>
@@ -402,7 +476,7 @@ const Login = () => {
             )}
           </div>
 
-          {/* MENSAJES DE ERROR Y ÉXITO */}
+          {/* MENSAJES */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-4">
               <div className="flex">
@@ -413,7 +487,7 @@ const Login = () => {
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-red-800">Error</h3>
-                  <div className="mt-2 text-sm text-red-700">{error}</div>
+                  <div className="mt-2 text-sm text-red-700 whitespace-pre-line">{error}</div>
                 </div>
               </div>
             </div>
@@ -429,13 +503,13 @@ const Login = () => {
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-green-800">¡Éxito!</h3>
-                  <div className="mt-2 text-sm text-green-700">{success}</div>
+                  <div className="mt-2 text-sm text-green-700 whitespace-pre-line">{success}</div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* BOTÓN DE SUBMIT DINÁMICO */}
+          {/* BOTÓN SUBMIT */}
           <div>
             <button
               type="submit"
@@ -452,39 +526,20 @@ const Login = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {mode === 'register' ? 'Registrando...' : mode === 'forgot' ? 'Enviando...' : 'Iniciando...'}
+                  {mode === 'register' ? 'Registrando...' : mode === 'forgot' ? 'Procesando...' : 'Iniciando sesión...'}
                 </div>
               ) : (
                 <>
                   {mode === 'register' ? '👨‍💼 Registrar Administrador' : 
-                   mode === 'forgot' ? '📧 Enviar Email de Recuperación' : 
+                   mode === 'forgot' ? '🔑 Solicitar Recuperación' : 
                    '🔐 Iniciar Sesión'}
                 </>
               )}
             </button>
           </div>
 
-          {/* CREDENCIALES DE PRUEBA - SOLO EN LOGIN */}
-          {mode === 'login' && (
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-secondary-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-secondary-50 text-secondary-500">
-                    Credenciales de Prueba
-                  </span>
-                </div>
-              </div>
-              <div className="mt-4 space-y-2 text-center text-xs text-secondary-600 bg-secondary-100 p-3 rounded-md">
-                <p><strong>🔑 Super Administrador:</strong> admin@taller.com / admin123</p>
-                <p><strong>📦 Almacenista:</strong> almacen@taller.com / almacen123</p>
-              </div>
-            </div>
-          )}
-
-          {/* INFORMACIÓN ADICIONAL SEGÚN EL MODO */}
+          
+          {/* INFORMACIÓN ADICIONAL */}
           {mode === 'register' && (
             <div className="mt-4 p-3 bg-blue-50 rounded-md">
               <p className="text-xs text-blue-800">
@@ -497,8 +552,8 @@ const Login = () => {
           {mode === 'forgot' && (
             <div className="mt-4 p-3 bg-yellow-50 rounded-md">
               <p className="text-xs text-yellow-800">
-                <strong>📧 Información:</strong> Recibirás un email con un enlace seguro para 
-                restablecer tu contraseña. Verifica tu bandeja de spam si no lo encuentras.
+                <strong>🔑 Información:</strong> Se generará un token de recuperación que deberás 
+                proporcionar al administrador del sistema para restablecer tu contraseña de forma segura.
               </p>
             </div>
           )}

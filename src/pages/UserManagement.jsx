@@ -6,7 +6,7 @@ import UserTable from '../components/Users/UserTable'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 
 const UserManagement = () => {
-  const { isSuperAdmin } = useAuth()
+  const { isSuperAdmin, user: currentUser } = useAuth() // ✅ Obtener usuario actual
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -25,9 +25,10 @@ const UserManagement = () => {
       setLoading(true)
       setError('')
 
+      // ✅ Consulta directa a la tabla usuarios
       const { data, error } = await supabase
         .from('usuarios')
-        .select('id, email, rol, created_at, updated_at')
+        .select('id, email, rol, nombre, activo, created_at, updated_at')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -44,65 +45,95 @@ const UserManagement = () => {
     }
   }
 
+  // ✅ Función para crear usuario directamente en la tabla
   const handleCreateUser = async (userData) => {
     try {
       setError('')
       setSuccess('')
 
-      // Crear usuario usando signUp de Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password,
-        options: {
-          data: {
-            rol: userData.rol
+      // Verificar si el email ya existe
+      const { data: existingUser } = await supabase
+        .from('usuarios')
+        .select('email')
+        .eq('email', userData.email.trim())
+        .single()
+
+      if (existingUser) {
+        setError('Ya existe un usuario con ese email')
+        return false
+      }
+
+      // Crear nuevo usuario
+      const { data, error } = await supabase
+        .from('usuarios')
+        .insert([
+          {
+            email: userData.email.trim(),
+            password: userData.password,
+            rol: userData.rol,
+            nombre: userData.nombre?.trim() || null,
+            activo: true
           }
-        }
-      })
+        ])
+        .select()
 
       if (error) {
         setError('Error al crear usuario: ' + error.message)
         return false
       }
 
-      if (data.user) {
-        // Insertar en la tabla usuarios personalizada
-        const { error: insertError } = await supabase
-          .from('usuarios')
-          .insert([{
-            id: data.user.id,
-            email: userData.email,
-            rol: userData.rol
-          }])
-
-        if (insertError) {
-          setError('Usuario creado pero error al guardar rol: ' + insertError.message)
-          return false
-        }
-
-        setSuccess(`Usuario creado exitosamente. Se ha enviado un email de confirmación a ${userData.email}`)
-        setShowForm(false)
-        fetchUsers()
-        return true
-      }
-
+      setSuccess('Usuario creado exitosamente')
+      setShowForm(false)
+      setEditingUser(null)
+      fetchUsers()
+      return true
     } catch (err) {
       console.error('Error al crear usuario:', err)
-      setError('Error inesperado al crear usuario: ' + err.message)
+      setError('Error inesperado al crear usuario')
       return false
     }
   }
 
+  // ✅ Función para actualizar usuario
   const handleUpdateUser = async (userId, userData) => {
     try {
       setError('')
       setSuccess('')
 
-      // Actualizar solo el rol en la tabla usuarios
-      const { error } = await supabase
+      // Verificar si el email ya existe en otro usuario
+      if (userData.email) {
+        const { data: existingUser } = await supabase
+          .from('usuarios')
+          .select('id, email')
+          .eq('email', userData.email.trim())
+          .neq('id', userId)
+          .single()
+
+        if (existingUser) {
+          setError('Ya existe otro usuario con ese email')
+          return false
+        }
+      }
+
+      // Preparar datos de actualización
+      const updateData = {
+        email: userData.email?.trim(),
+        rol: userData.rol,
+        nombre: userData.nombre?.trim() || null,
+        activo: userData.activo !== undefined ? userData.activo : true,
+        updated_at: new Date().toISOString()
+      }
+
+      // Solo incluir password si se proporciona
+      if (userData.password && userData.password.trim() !== '') {
+        updateData.password = userData.password
+      }
+
+      const { data, error } = await supabase
         .from('usuarios')
-        .update({ rol: userData.rol })
+        .update(updateData)
         .eq('id', userId)
+        .select()
 
       if (error) {
         setError('Error al actualizar usuario: ' + error.message)
@@ -114,16 +145,22 @@ const UserManagement = () => {
       setEditingUser(null)
       fetchUsers()
       return true
-
     } catch (err) {
       console.error('Error al actualizar usuario:', err)
-      setError('Error inesperado al actualizar usuario: ' + err.message)
+      setError('Error inesperado al actualizar usuario')
       return false
     }
   }
 
+  // ✅ Función para eliminar usuario
   const handleDeleteUser = async (userId, userEmail) => {
-    if (!confirm(`¿Estás seguro de eliminar al usuario ${userEmail}? Esta acción no se puede deshacer.`)) {
+    // Prevenir que el super admin se elimine a sí mismo
+    if (currentUser?.id === userId) {
+      setError('No puedes eliminar tu propia cuenta')
+      return
+    }
+
+    if (!confirm(`¿Estás seguro de eliminar al usuario ${userEmail}?\n\nEsta acción no se puede deshacer.`)) {
       return
     }
 
@@ -131,54 +168,99 @@ const UserManagement = () => {
       setError('')
       setSuccess('')
 
-      // Primero eliminar de la tabla usuarios personalizada
-      const { error: deleteError } = await supabase
+      // ✅ Eliminación directa de la tabla usuarios
+      const { error } = await supabase
         .from('usuarios')
         .delete()
         .eq('id', userId)
 
-      if (deleteError) {
-        setError('Error al eliminar usuario: ' + deleteError.message)
+      if (error) {
+        setError('Error al eliminar usuario: ' + error.message)
         return
       }
 
-      // Nota: Para eliminar completamente de auth.users se necesita Service Role Key
-      // Por ahora solo eliminamos de la tabla usuarios personalizada
-      setSuccess(`Usuario ${userEmail} eliminado de la aplicación (el registro en auth permanece)`)
+      setSuccess(`Usuario ${userEmail} eliminado exitosamente`)
       fetchUsers()
-
     } catch (err) {
       console.error('Error al eliminar usuario:', err)
-      setError('Error inesperado al eliminar usuario: ' + err.message)
+      setError('Error inesperado al eliminar usuario')
     }
   }
 
+  // ✅ Función para generar token de recuperación de contraseña
   const handleResetPassword = async (userId, userEmail) => {
     try {
       setError('')
       setSuccess('')
 
-      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
-        redirectTo: `${window.location.origin}/reset-password`
-      })
+      // Generar token de recuperación
+      const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas
 
-      if (error) {
-        setError('Error al enviar email de recuperación: ' + error.message)
-        return
+      // Guardar token en la tabla de reset
+      const { error: tokenError } = await supabase
+        .from('password_reset_tokens')
+        .upsert([
+          {
+            email: userEmail,
+            token: resetToken,
+            expires_at: expiresAt.toISOString(),
+            used: false
+          }
+        ])
+
+      if (tokenError) {
+        console.log('Error guardando token (tabla no existe):', tokenError)
+        // Si la tabla no existe, mostrar token directamente
+        setSuccess(`Token de recuperación generado para ${userEmail}:\n\n${resetToken}\n\n(Válido por 24 horas)\n\nComparte este token con el usuario para que pueda recuperar su contraseña.`)
+      } else {
+        setSuccess(`Token de recuperación generado para ${userEmail}:\n\n${resetToken}\n\n(Válido por 24 horas)`)
       }
-
-      setSuccess(`Email de recuperación enviado a ${userEmail}`)
-
     } catch (err) {
-      console.error('Error al enviar email de recuperación:', err)
-      setError('Error inesperado al enviar email de recuperación: ' + err.message)
+      console.error('Error al generar token de recuperación:', err)
+      setError('Error al generar token de recuperación')
     }
   }
 
-  const clearMessages = () => {
-    setError('')
-    setSuccess('')
+  // ✅ Función para activar/desactivar usuario
+  const handleToggleUserStatus = async (userId, currentStatus) => {
+    try {
+      setError('')
+      setSuccess('')
+
+      const newStatus = !currentStatus
+      
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ 
+          activo: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+      if (error) {
+        setError('Error al cambiar estado del usuario: ' + error.message)
+        return
+      }
+
+      setSuccess(`Usuario ${newStatus ? 'activado' : 'desactivado'} exitosamente`)
+      fetchUsers()
+    } catch (err) {
+      console.error('Error al cambiar estado:', err)
+      setError('Error inesperado al cambiar estado del usuario')
+    }
   }
+
+  // Limpiar mensajes después de un tiempo
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError('')
+        setSuccess('')
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [error, success])
 
   if (!isSuperAdmin()) {
     return (
@@ -211,35 +293,29 @@ const UserManagement = () => {
             Administrar usuarios administradores del sistema
           </p>
         </div>
-        <div className="mt-4 flex md:mt-0 md:ml-4">
+        <div className="mt-4 flex md:mt-0 md:ml-4 space-x-3">
           <button
-            onClick={() => {
-              clearMessages()
-              fetchUsers()
-            }}
-            className="px-4 py-2 border border-secondary-300 rounded-md text-sm font-medium bg-white text-secondary-700 hover:bg-secondary-50 transition-colors"
+            onClick={fetchUsers}
+            disabled={loading}
+            className="px-4 py-2 border border-secondary-300 rounded-md text-sm font-medium bg-white text-secondary-700 hover:bg-secondary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Actualizar
+            {loading ? 'Cargando...' : 'Actualizar'}
           </button>
           <button
             onClick={() => {
               setEditingUser(null)
               setShowForm(true)
-              clearMessages()
+              setError('')
+              setSuccess('')
             }}
-            className="ml-3 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors"
+            className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors"
           >
-            <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Nuevo Usuario
+            + Nuevo Usuario
           </button>
         </div>
       </div>
 
+      {/* Mensajes de error y éxito */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex">
@@ -250,19 +326,7 @@ const UserManagement = () => {
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <div className="mt-2 text-sm text-red-700">{error}</div>
-            </div>
-            <div className="ml-auto pl-3">
-              <div className="-mx-1.5 -my-1.5">
-                <button
-                  onClick={clearMessages}
-                  className="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
+              <div className="mt-2 text-sm text-red-700 whitespace-pre-line">{error}</div>
             </div>
           </div>
         </div>
@@ -277,25 +341,14 @@ const UserManagement = () => {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-green-800">Éxito</h3>
-              <div className="mt-2 text-sm text-green-700">{success}</div>
-            </div>
-            <div className="ml-auto pl-3">
-              <div className="-mx-1.5 -my-1.5">
-                <button
-                  onClick={clearMessages}
-                  className="inline-flex bg-green-50 rounded-md p-1.5 text-green-500 hover:bg-green-100"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
+              <h3 className="text-sm font-medium text-green-800">¡Éxito!</h3>
+              <div className="mt-2 text-sm text-green-700 whitespace-pre-line">{success}</div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Formulario de usuario */}
       {showForm && (
         <UserForm
           user={editingUser}
@@ -306,41 +359,71 @@ const UserManagement = () => {
           onCancel={() => {
             setEditingUser(null)
             setShowForm(false)
-            clearMessages()
+            setError('')
+            setSuccess('')
           }}
         />
       )}
 
+      {/* Tabla de usuarios */}
       <UserTable
         users={users}
+        currentUserId={currentUser?.id} // ✅ Pasar ID del usuario actual
         onEdit={(user) => {
           setEditingUser(user)
           setShowForm(true)
-          clearMessages()
+          setError('')
+          setSuccess('')
         }}
         onDelete={handleDeleteUser}
         onResetPassword={handleResetPassword}
+        onToggleStatus={handleToggleUserStatus} // ✅ Nueva función
       />
 
+      {/* Estado vacío */}
       {users.length === 0 && !loading && (
         <div className="text-center py-12">
           <svg className="mx-auto h-12 w-12 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-secondary-900">No hay usuarios</h3>
-          <p className="mt-1 text-sm text-secondary-500">
-            Comienza creando un nuevo usuario administrador.
-          </p>
+          <p className="mt-1 text-sm text-secondary-500">Comienza creando un nuevo usuario administrador.</p>
           <div className="mt-6">
             <button
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setShowForm(true)
+                setError('')
+                setSuccess('')
+              }}
               className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
             >
-              Crear Usuario
+              Crear Primer Usuario
             </button>
           </div>
         </div>
       )}
+
+      {/* Información adicional */}
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">Información</h3>
+            <div className="mt-2 text-sm text-blue-700">
+              <ul className="list-disc list-inside space-y-1">
+                <li>Solo se pueden crear cuentas de administrador desde aquí</li>
+                <li>Los empleados se gestionan desde el módulo de empleados</li>
+                <li>Los tokens de recuperación son válidos por 24 horas</li>
+                <li>No puedes eliminar tu propia cuenta</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

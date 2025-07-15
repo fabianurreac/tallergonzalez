@@ -3,28 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = 'https://fzccxxncpdjblilzhpul.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6Y2N4eG5jcGRqYmxpbHpocHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3NzU0NTQsImV4cCI6MjA2NzM1MTQ1NH0.Xrks8EaeP0hEMhTAuBu-k83yLpsJSSj-MAeWZBxcYJw'
 
-
-// Para pruebas, usar estas credenciales temporales:
-// URL: https://xyzcompany.supabase.co  
-// ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5emNvbXBhbnkiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY5ODc1NzIwMCwiZXhwIjoyMDE0MzMzMjAwfQ.sample_key
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Configuración de autenticación
-export const authConfig = {
-  redirectTo: `${window.location.origin}/dashboard`,
-  appearance: {
-    theme: 'light',
-    variables: {
-      default: {
-        colors: {
-          brand: '#dc2626',
-          brandAccent: '#b91c1c',
-        },
-      },
-    },
-  },
-}
 
 // Roles de usuario
 export const USER_ROLES = {
@@ -55,3 +34,92 @@ export const TOOL_CATEGORIES = [
   'Embellecimiento',
   'Latonería y pintura'
 ]
+
+// Estados de reservas
+export const RESERVATION_STATES = {
+  RESERVADA: 'reservada',
+  DEVUELTA: 'devuelta'
+}
+
+// Configuración para la aplicación
+export const APP_CONFIG = {
+  name: 'Sistema de Gestión de Inventario',
+  version: '1.0.0',
+  logo: '/logo.png',
+  theme: {
+    primary: 'red', // Rojo como color principal
+    secondary: 'gray' // Gris como color secundario
+  }
+}
+
+// Helper functions para validaciones
+export const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+export const isValidPassword = (password) => {
+  return password && password.length >= 6
+}
+
+export const getDisplayRole = (role) => {
+  switch (role) {
+    case USER_ROLES.SUPERADMIN:
+      return 'Super Administrador'
+    case USER_ROLES.ALMACENISTA:
+      return 'Almacenista'
+    default:
+      return 'Usuario'
+  }
+}
+
+export const getDisplayState = (state) => {
+  switch (state) {
+    case TOOL_STATES.DISPONIBLE:
+      return 'Disponible'
+    case TOOL_STATES.RESERVADA:
+      return 'Reservada'
+    default:
+      return state
+  }
+}
+
+export const getDisplayCondition = (condition) => {
+  switch (condition) {
+    case TOOL_CONDITIONS.BUENO:
+      return 'Bueno'
+    case TOOL_CONDITIONS.MALO:
+      return 'Malo'
+    case TOOL_CONDITIONS.DETERIORO:
+      return 'En Deterioro'
+    default:
+      return condition
+  }
+}
+
+// Función para formatear fechas
+export const formatDate = (dateString) => {
+  if (!dateString) return 'N/A'
+  
+  return new Date(dateString).toLocaleDateString('es-ES', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// Función para generar códigos QR únicos
+export const generateQRCode = (prefix = 'EMP') => {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).substring(2, 8)
+  return `${prefix}_${timestamp}_${random}`.toUpperCase()
+}
+
+// Función para generar seriales únicos
+export const generateSerial = (prefix = 'TOOL') => {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).substring(2, 10)
+  return `${prefix}_${timestamp}_${random}`.toUpperCase()
+}

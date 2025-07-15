@@ -1,5 +1,5 @@
-import { useState, useEffect, createContext, useContext } from 'react'
-import { supabase, USER_ROLES } from '../config/supabase'
+import { useState, useEffect, createContext, useContext, useCallback } from 'react'
+import { supabase } from '../config/supabase'
 
 const AuthContext = createContext({})
 
@@ -13,128 +13,153 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
-  const [userRole, setUserRole] = useState(null)
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
-  useEffect(() => {
-    // Solo ejecutar una vez al inicializar
-    if (initialized) return
-
-    const initializeAuth = async () => {
-      try {
-        // Obtener sesión inicial
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error getting session:', error)
-          setUser(null)
-          setUserRole(null)
-        } else if (session?.user) {
-          setUser(session.user)
-          // Obtener rol del usuario
-          await fetchUserRole(session.user.id)
-        } else {
-          setUser(null)
-          setUserRole(null)
-        }
-        
-        setInitialized(true)
-        setLoading(false)
-      } catch (error) {
-        console.error('Error initializing auth:', error)
-        setUser(null)
-        setUserRole(null)
-        setInitialized(true)
-        setLoading(false)
-      }
-    }
-
-    initializeAuth()
-  }, [initialized])
-
-  useEffect(() => {
-    // Escuchar cambios en la autenticación solo después de inicializar
-    if (!initialized) return
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email)
-        
-        if (event === 'SIGNED_OUT' || !session?.user) {
-          setUser(null)
-          setUserRole(null)
-        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (session?.user) {
-            setUser(session.user)
-            await fetchUserRole(session.user.id)
-          }
-        }
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [initialized])
-
-  const fetchUserRole = async (userId) => {
+  // ✅ Función para verificar sesión sin causar bucles
+  const checkStoredSession = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('rol')
-        .eq('id', userId)
-        .single()
-
-      if (error) {
-        console.error('Error fetching user role:', error)
-        setUserRole(null)
+      const savedUser = localStorage.getItem('taller_user')
+      
+      if (!savedUser) {
+        setLoading(false)
+        setInitialized(true)
         return
       }
 
-      setUserRole(data?.rol || null)
-    } catch (error) {
-      console.error('Error fetching user role:', error)
-      setUserRole(null)
-    }
-  }
+      const userData = JSON.parse(savedUser)
+      
+      // Verificar que el usuario aún existe y está activo
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('id, email, rol, nombre, activo')
+        .eq('id', userData.id)
+        .eq('activo', true)
+        .single()
 
-  const signOut = async () => {
+      if (error || !data) {
+        // Usuario no encontrado o inactivo, limpiar sesión
+        console.log('Usuario no encontrado o inactivo, limpiando sesión')
+        localStorage.removeItem('taller_user')
+        setUser(null)
+      } else {
+        // Usuario válido
+        const validUser = {
+          id: data.id,
+          email: data.email,
+          rol: data.rol,
+          nombre: data.nombre
+        }
+        setUser(validUser)
+        // Actualizar localStorage con datos frescos
+        localStorage.setItem('taller_user', JSON.stringify(validUser))
+      }
+    } catch (error) {
+      console.error('Error verificando sesión:', error)
+      localStorage.removeItem('taller_user')
+      setUser(null)
+    } finally {
+      setLoading(false)
+      setInitialized(true)
+    }
+  }, []) // ✅ Sin dependencias para evitar bucles
+
+  // ✅ Efecto que solo se ejecuta una vez al montar
+  useEffect(() => {
+    checkStoredSession()
+  }, [checkStoredSession])
+
+  // ✅ Función de login mejorada
+  const login = useCallback(async (email, password) => {
     try {
       setLoading(true)
-      const { error } = await supabase.auth.signOut()
       
+      console.log('Intentando login con:', email)
+      
+      // Consultar usuario en la base de datos
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .eq('password', password)
+        .eq('activo', true)
+        .single()
+
       if (error) {
-        console.error('Error signing out:', error)
-        throw error
+        console.error('Error en consulta de login:', error)
+        return { 
+          success: false, 
+          error: 'Credenciales incorrectas o usuario inactivo' 
+        }
       }
+
+      if (!data) {
+        console.log('No se encontró usuario con esas credenciales')
+        return { 
+          success: false, 
+          error: 'Credenciales incorrectas' 
+        }
+      }
+
+      console.log('Usuario encontrado:', data.email, 'Rol:', data.rol)
+
+      // Guardar usuario en estado y localStorage
+      const userData = {
+        id: data.id,
+        email: data.email,
+        rol: data.rol,
+        nombre: data.nombre
+      }
+
+      setUser(userData)
+      localStorage.setItem('taller_user', JSON.stringify(userData))
       
-      // Limpiar estado local
-      setUser(null)
-      setUserRole(null)
+      return { success: true, user: userData }
     } catch (error) {
-      console.error('Error signing out:', error)
-      throw error
+      console.error('Error inesperado en login:', error)
+      return { 
+        success: false, 
+        error: 'Error al conectar con el servidor' 
+      }
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const isSuperAdmin = () => userRole === USER_ROLES.SUPERADMIN
-  const isAlmacenista = () => userRole === USER_ROLES.ALMACENISTA
-  const hasPermission = (requiredRole) => {
-    if (requiredRole === USER_ROLES.SUPERADMIN) {
-      return isSuperAdmin()
+  // ✅ Función de logout mejorada
+  const logout = useCallback(() => {
+    setUser(null)
+    localStorage.removeItem('taller_user')
+    console.log('Sesión cerrada')
+  }, [])
+
+  // ✅ Función para actualizar usuario
+  const updateUser = useCallback((updatedUserData) => {
+    const newUserData = { ...user, ...updatedUserData }
+    setUser(newUserData)
+    localStorage.setItem('taller_user', JSON.stringify(newUserData))
+  }, [user])
+
+  // ✅ Funciones de permisos
+  const isSuperAdmin = useCallback(() => user?.rol === 'superadmin', [user?.rol])
+  const isAlmacenista = useCallback(() => user?.rol === 'almacenista', [user?.rol])
+  
+  const hasPermission = useCallback((requiredRole) => {
+    if (!user) return false
+    if (requiredRole === 'superadmin') {
+      return user.rol === 'superadmin'
     }
-    return isAlmacenista() || isSuperAdmin()
-  }
+    return user.rol === 'almacenista' || user.rol === 'superadmin'
+  }, [user])
 
+  // ✅ Valor del contexto estable
   const value = {
     user,
-    userRole,
     loading,
     initialized,
-    signOut,
+    login,
+    logout,
+    updateUser,
     isSuperAdmin,
     isAlmacenista,
     hasPermission
