@@ -8,6 +8,7 @@ const StatsCards = () => {
     reservedTools: 0,
     totalEmployees: 0,
     activeReservations: 0,
+    overdueReservations: 0,
     alertsCount: 0
   })
   const [loading, setLoading] = useState(true)
@@ -39,10 +40,10 @@ const StatsCards = () => {
         console.error('Error fetching employees:', employeesError)
       }
 
-      // Reservas activas
-      const { count: activeReservationsCount, error: reservationsError } = await supabase
+      // Reservas activas (para calcular vencidas también)
+      const { data: reservationsData, error: reservationsError } = await supabase
         .from('reservas')
-        .select('*', { count: 'exact', head: true })
+        .select('estado, fecha_devolucion_estimada')
         .eq('estado', 'reservada')
 
       if (reservationsError) {
@@ -64,12 +65,22 @@ const StatsCards = () => {
       const availableTools = toolsData?.filter(tool => tool.estado === 'disponible').length || 0
       const reservedTools = toolsData?.filter(tool => tool.estado === 'reservada').length || 0
 
+      // Calcular reservas vencidas
+      const now = new Date()
+      const overdueReservations = reservationsData?.filter(reservation => {
+        const dueDate = new Date(reservation.fecha_devolucion_estimada)
+        return dueDate < now
+      }).length || 0
+
+      const activeReservations = reservationsData?.length || 0
+
       setStats({
         totalTools,
         availableTools,
         reservedTools,
         totalEmployees: employeesCount || 0,
-        activeReservations: activeReservationsCount || 0,
+        activeReservations,
+        overdueReservations,
         alertsCount: alertsCount || 0
       })
 
@@ -137,6 +148,18 @@ const StatsCards = () => {
       bgColor: 'bg-indigo-50'
     },
     {
+      name: 'Reservas Vencidas',
+      value: stats.overdueReservations,
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      color: 'text-red-600',
+      bgColor: 'bg-red-50',
+      isAlert: stats.overdueReservations > 0
+    },
+    {
       name: 'Alertas',
       value: stats.alertsCount,
       icon: (
@@ -144,15 +167,16 @@ const StatsCards = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.854-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
         </svg>
       ),
-      color: 'text-red-600',
-      bgColor: 'bg-red-50'
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+      isAlert: stats.alertsCount > 0
     }
   ]
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, index) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {Array.from({ length: 7 }).map((_, index) => (
           <div key={index} className="bg-white overflow-hidden shadow rounded-lg animate-pulse">
             <div className="p-5">
               <div className="flex items-center">
@@ -172,13 +196,20 @@ const StatsCards = () => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {statsData.map((stat) => (
-        <div key={stat.name} className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow duration-200">
+        <div 
+          key={stat.name} 
+          className={`bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-all duration-200 ${
+            stat.isAlert ? 'ring-2 ring-red-200 shadow-red-100' : ''
+          }`}
+        >
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className={`w-8 h-8 ${stat.bgColor} rounded-md flex items-center justify-center`}>
+                <div className={`w-8 h-8 ${stat.bgColor} rounded-md flex items-center justify-center ${
+                  stat.isAlert ? 'animate-pulse' : ''
+                }`}>
                   <div className={stat.color}>
                     {stat.icon}
                   </div>
@@ -186,15 +217,34 @@ const StatsCards = () => {
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-secondary-500 truncate">
+                  <dt className={`text-sm font-medium truncate ${
+                    stat.isAlert ? 'text-red-700' : 'text-secondary-500'
+                  }`}>
                     {stat.name}
+                    {stat.isAlert && (
+                      <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        !
+                      </span>
+                    )}
                   </dt>
-                  <dd className="text-lg font-medium text-secondary-900">
+                  <dd className={`text-lg font-medium ${
+                    stat.isAlert ? 'text-red-900' : 'text-secondary-900'
+                  }`}>
                     {stat.value}
                   </dd>
                 </dl>
               </div>
             </div>
+            
+            {/* Indicador adicional para alertas */}
+            {stat.isAlert && (
+              <div className="mt-2 text-xs text-red-600 flex items-center">
+                <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Requiere atención
+              </div>
+            )}
           </div>
         </div>
       ))}

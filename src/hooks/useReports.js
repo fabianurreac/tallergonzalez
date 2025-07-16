@@ -15,6 +15,7 @@ export const useReports = () => {
       totalEmployees: 0,
       totalReservations: 0,
       activeReservations: 0,
+      overdueReservations: 0,
       alertsCount: 0
     },
     topTools: [],
@@ -23,6 +24,8 @@ export const useReports = () => {
     toolsStatus: [],
     toolsCondition: [],
     reservationsByMonth: [],
+    overdueReservationsData: [],
+    alertsData: [],
     
     loading: true,
     error: null
@@ -57,7 +60,37 @@ export const useReports = () => {
       if (activeReservationsError) throw activeReservationsError
       if (alertsError) throw alertsError
 
-      // 2. Top herramientas más usadas
+      // 2. Reservas vencidas
+      const { data: reservationsData, error: reservationsError } = await supabase
+        .from('reservas')
+        .select(`
+          *,
+          empleados (nombre_completo, cargo),
+          herramientas (nombre, categoria, serial)
+        `)
+        .eq('estado', 'reservada')
+
+      if (reservationsError) throw reservationsError
+
+      // Filtrar reservas vencidas
+      const now = new Date()
+      const overdueReservationsData = (reservationsData || []).filter(reservation => {
+        const dueDate = new Date(reservation.fecha_devolucion_estimada)
+        return dueDate < now
+      })
+
+      // 3. Datos de alertas
+      const { data: alertsData, error: alertsDataError } = await supabase
+        .from('alertas')
+        .select(`
+          *,
+          herramientas (nombre, categoria, condicion)
+        `)
+        .order('fecha_creacion', { ascending: false })
+
+      if (alertsDataError) throw alertsDataError
+
+      // 4. Top herramientas más usadas
       const { data: topToolsData, error: topToolsError } = await supabase
         .from('reporte_herramientas_mas_usadas')
         .select('*')
@@ -66,7 +99,7 @@ export const useReports = () => {
 
       if (topToolsError) throw topToolsError
 
-      // 3. Top empleados más activos
+      // 5. Top empleados más activos
       const { data: topEmployeesData, error: topEmployeesError } = await supabase
         .from('reporte_empleados_mas_activos')
         .select('*')
@@ -75,7 +108,7 @@ export const useReports = () => {
 
       if (topEmployeesError) throw topEmployeesError
 
-      // 4. Reservas por mes (últimos 12 meses)
+      // 6. Reservas por mes (últimos 12 meses)
       const { data: monthlyReservationsData, error: monthlyError } = await supabase
         .from('reservas')
         .select('fecha_reserva')
@@ -85,12 +118,13 @@ export const useReports = () => {
 
       // Procesar datos
 
-      // Estadísticas generales
+      // Estadísticas generales (incluyendo vencidas)
       const generalStats = {
         totalTools: toolsData?.length || 0,
         totalEmployees: employeesCount || 0,
         totalReservations: totalReservationsCount || 0,
         activeReservations: activeReservationsCount || 0,
+        overdueReservations: overdueReservationsData.length,
         alertsCount: alertsCount || 0
       }
 
@@ -154,11 +188,17 @@ export const useReports = () => {
         total: item.count
       }))
 
-      // Estado de reservas para gráficos
-      const reservationsStats = toolsStatus.map(item => ({
-        estado: item.estado,
-        total: item.count
-      }))
+      // Estado de reservas para gráficos (incluyendo vencidas)
+      const reservationsStats = [
+        ...toolsStatus.map(item => ({
+          estado: item.estado,
+          total: item.count
+        })),
+        {
+          estado: 'Vencidas',
+          total: overdueReservationsData.length
+        }
+      ].filter(item => item.total > 0)
 
       // Actualizar estado
       setData({
@@ -177,6 +217,8 @@ export const useReports = () => {
         toolsStatus,
         toolsCondition,
         reservationsByMonth,
+        overdueReservationsData,
+        alertsData: alertsData || [],
         
         loading: false,
         error: null
@@ -205,7 +247,21 @@ export const useReports = () => {
       toolsByCategory: data.toolsByCategory,
       toolsStatus: data.toolsStatus,
       toolsCondition: data.toolsCondition,
-      reservationsByMonth: data.reservationsByMonth
+      reservationsByMonth: data.reservationsByMonth,
+      overdueReservations: data.overdueReservationsData.map(reservation => ({
+        empleado: reservation.empleados?.nombre_completo,
+        herramienta: reservation.herramientas?.nombre,
+        categoria: reservation.herramientas?.categoria,
+        serial: reservation.herramientas?.serial,
+        fecha_estimada: reservation.fecha_devolucion_estimada,
+        dias_vencido: Math.ceil((new Date() - new Date(reservation.fecha_devolucion_estimada)) / (1000 * 60 * 60 * 24))
+      })),
+      alertsByType: data.alertsData.reduce((acc, alert) => {
+        const type = alert.motivo?.toLowerCase().includes('deterioro') ? 'Deterioro' : 
+                    alert.motivo?.toLowerCase().includes('vencida') ? 'Vencidas' : 'General'
+        acc[type] = (acc[type] || 0) + 1
+        return acc
+      }, {})
     }
   }
 

@@ -57,22 +57,127 @@ const EmployeeCard = ({ employee, onEdit, onDelete }) => {
                 padding-top: 20px;
                 border-top: 1px solid #eee;
               }
+              
               @media print {
-                body { padding: 0; }
-                .no-print { display: none; }
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
+                
+                @page {
+                  margin-top: 2cm !important;
+                  margin-bottom: 0 !important;
+                  margin-left: 2 !important;
+                  margin-right: 0 !important;
+                  size: auto !important;
+                }
+                
+                body { 
+                  padding: 0;
+                  margin: 0;
+                  font-family: Arial, sans-serif;
+                  -webkit-print-color-adjust: exact !important;
+                  color-adjust: exact !important;
+                }
+                
+                .no-print { 
+                  display: none !important;
+                }
+                
+                .qr-container {
+                  width: 8cm !important;
+                  height: 5cm !important;
+                  max-width: none !important;
+                  margin: 0 !important;
+                  padding: 0.3cm !important;
+                  border: 1px solid #000 !important;
+                  border-radius: 0.2cm !important;
+                  background: white !important;
+                  display: flex !important;
+                  flex-direction: column !important;
+                  page-break-after: always;
+                }
+                
+                .qr-container h2 {
+                  font-size: 10pt !important;
+                  font-weight: bold !important;
+                  margin: 0 0 0.2cm 0 !important;
+                  text-align: center !important;
+                  color: #000 !important;
+                }
+                
+                .qr-content {
+                  display: flex !important;
+                  flex: 1 !important;
+                  gap: 0.3cm !important;
+                  align-items: flex-start !important;
+                }
+                
+                .qr-image {
+                  width: 2.5cm !important;
+                  height: 2.5cm !important;
+                  margin: 0 !important;
+                  display: block !important;
+                  flex-shrink: 0 !important;
+                }
+                
+                .employee-info {
+                  flex: 1 !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  border: none !important;
+                  text-align: left !important;
+                }
+                
+                .employee-info h3 {
+                  font-size: 11pt !important;
+                  font-weight: bold !important;
+                  margin: 0 0 0.1cm 0 !important;
+                  color: #000 !important;
+                }
+                
+                .employee-info p {
+                  font-size: 8pt !important;
+                  margin: 0.05cm 0 !important;
+                  color: #000 !important;
+                  line-height: 1.2 !important;
+                }
+                
+                .employee-info strong {
+                  font-weight: bold !important;
+                }
+                
+                .print-footer {
+                  text-align: center !important;
+                  font-size: 6pt !important;
+                  color: #666 !important;
+                  margin-top: 0.1cm !important;
+                  border-top: 1px solid #ddd !important;
+                  padding-top: 0.05cm !important;
+                }
               }
             </style>
           </head>
           <body>
             <div class="qr-container">
               <h2>Código QR de Empleado</h2>
-              <img src="${qrImageUrl}" alt="Código QR" class="qr-image" />
-              <div class="employee-info">
-                <h3>${employee.nombre_completo}</h3>
-                <p><strong>ID:</strong> ${employee.identificacion}</p>
-                <p><strong>Cargo:</strong> ${employee.cargo}</p>
-                <p><strong>Teléfono:</strong> ${employee.telefono}</p>
+              
+              <div class="qr-content">
+                <img src="${qrImageUrl}" alt="Código QR" class="qr-image" />
+                
+                <div class="employee-info">
+                  <h3>${employee.nombre_completo}</h3>
+                  <p><strong>ID:</strong> ${employee.identificacion}</p>
+                  <p><strong>Cargo:</strong> ${employee.cargo}</p>
+                  <p><strong>Teléfono:</strong> ${employee.telefono}</p>
+                </div>
               </div>
+              
+              <div class="print-footer">
+                Escanea el QR para reservar herramientas
+              </div>
+              
               <div class="no-print" style="margin-top: 30px;">
                 <button onclick="window.print()" style="padding: 10px 20px; background: #dc2626; color: white; border: none; border-radius: 5px; cursor: pointer;">
                   Imprimir

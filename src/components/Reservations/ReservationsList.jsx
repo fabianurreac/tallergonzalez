@@ -1,14 +1,12 @@
-import { useState } from 'react'
-
-const ReservationsList = ({ reservations, onEdit, onDelete, onReturn, hasPermission }) => {
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
-
-  // Calcular paginación
-  const totalPages = Math.ceil(reservations.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const currentReservations = reservations.slice(startIndex, endIndex)
+const ReservationsList = ({ 
+  reservations, 
+  onEdit, 
+  onDelete, 
+  onReturn, 
+  hasPermission,
+  isReservationOverdue,
+  getDaysOverdue 
+}) => {
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
@@ -21,60 +19,30 @@ const ReservationsList = ({ reservations, onEdit, onDelete, onReturn, hasPermiss
   }
 
   const getStatusBadge = (estado) => {
+    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+    
     switch (estado) {
       case 'reservada':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-            </svg>
-            Reservada
-          </span>
-        )
+        return `${baseClasses} bg-yellow-100 text-yellow-800`
       case 'devuelta':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Devuelta
-          </span>
-        )
+        return `${baseClasses} bg-green-100 text-green-800`
       default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary-100 text-secondary-800">
-            {estado}
-          </span>
-        )
+        return `${baseClasses} bg-secondary-100 text-secondary-800`
     }
   }
 
   const getConditionBadge = (condicion) => {
+    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+    
     switch (condicion) {
       case 'bueno':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Bueno
-          </span>
-        )
-      case 'malo':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            Malo
-          </span>
-        )
+        return `${baseClasses} bg-green-100 text-green-800`
       case 'deterioro':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-            Deterioro
-          </span>
-        )
+        return `${baseClasses} bg-yellow-100 text-yellow-800`
+      case 'malo':
+        return `${baseClasses} bg-red-100 text-red-800`
       default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary-100 text-secondary-800">
-            {condicion}
-          </span>
-        )
+        return `${baseClasses} bg-secondary-100 text-secondary-800`
     }
   }
 
@@ -83,129 +51,144 @@ const ReservationsList = ({ reservations, onEdit, onDelete, onReturn, hasPermiss
       <div className="bg-white shadow rounded-lg">
         <div className="text-center py-12">
           <svg className="mx-auto h-12 w-12 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-secondary-900">No hay reservas</h3>
-          <p className="mt-1 text-sm text-secondary-500">Comienza creando una nueva reserva.</p>
+          <p className="mt-1 text-sm text-secondary-500">
+            No se encontraron reservas con los filtros aplicados.
+          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-secondary-200">
-          <thead className="bg-secondary-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                Herramienta
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                Empleado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                Fechas
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                Condición
-              </th>
-              {hasPermission('almacenista') && (
-                <th className="px-6 py-3 text-right text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-secondary-200">
-            {currentReservations.map((reservation) => (
-              <tr key={reservation.id} className="hover:bg-secondary-50 transition-colors duration-150">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
+    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="px-4 py-5 sm:px-6">
+        <h3 className="text-lg leading-6 font-medium text-secondary-900">
+          Lista de Reservas ({reservations.length})
+        </h3>
+        <p className="mt-1 max-w-2xl text-sm text-secondary-500">
+          Gestiona todas las reservas de herramientas del taller
+        </p>
+      </div>
+      
+      <div className="border-t border-secondary-200">
+        <div className="divide-y divide-secondary-200">
+          {reservations.map((reservation) => {
+            const isOverdue = isReservationOverdue && isReservationOverdue(reservation)
+            const daysOverdue = getDaysOverdue && getDaysOverdue(reservation)
+            
+            return (
+              <div
+                key={reservation.id}
+                className={`p-6 hover:bg-secondary-50 transition-colors duration-150 ${
+                  isOverdue ? 'bg-red-50 border-l-4 border-red-400' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1">
+                    {/* Imagen de la herramienta */}
+                    <div className="flex-shrink-0">
                       {reservation.herramientas?.imagen ? (
                         <img
-                          className="h-10 w-10 rounded object-cover"
+                          className="h-16 w-16 rounded-lg object-cover"
                           src={reservation.herramientas.imagen}
-                          alt={reservation.herramientas.nombre}
+                          alt={reservation.herramientas?.nombre}
                           onError={(e) => {
-                            e.target.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAzMEwxMCAyMEwzMCAyMEwyMCAzMFoiIGZpbGw9IiM5Q0EzQUYiLz4KPC9zdmc+"
+                            e.target.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAyOEgzNlYzNkgyOFY0NEgyMFYyOFoiIGZpbGw9IiM5Q0EzQUYiLz4KPC9zdmc+"
                           }}
                         />
                       ) : (
-                        <div className="h-10 w-10 rounded bg-secondary-200 flex items-center justify-center">
-                          <svg className="h-6 w-6 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        <div className="h-16 w-16 rounded-lg bg-secondary-100 flex items-center justify-center">
+                          <svg className="h-8 w-8 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
                         </div>
                       )}
                     </div>
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-secondary-900">
-                        {reservation.herramientas?.nombre}
+
+                    {/* Información de la reserva */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className={`text-lg font-medium ${isOverdue ? 'text-red-900' : 'text-secondary-900'} truncate`}>
+                            {reservation.herramientas?.nombre}
+                          </h4>
+                          <p className={`text-sm ${isOverdue ? 'text-red-700' : 'text-secondary-600'} flex items-center mt-1`}>
+                            <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {reservation.empleados?.nombre_completo}
+                            <span className="ml-2 text-xs">({reservation.empleados?.cargo})</span>
+                          </p>
+                        </div>
+
+                        {/* Badges de estado */}
+                        <div className="flex flex-col items-end space-y-2">
+                          <div className="flex space-x-2">
+                            <span className={getStatusBadge(reservation.estado)}>
+                              {reservation.estado === 'reservada' ? 'Reservada' : 'Devuelta'}
+                            </span>
+                            <span className={getConditionBadge(reservation.condicion)}>
+                              {reservation.condicion}
+                            </span>
+                          </div>
+                          
+                          {/* Indicador de vencimiento */}
+                          {isOverdue && (
+                            <div className="flex items-center text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                              <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Vencida ({daysOverdue} día{daysOverdue !== 1 ? 's' : ''})
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-sm text-secondary-500">
-                        Serial: {reservation.herramientas?.serial}
-                      </div>
-                      <div className="text-xs text-secondary-400">
-                        {reservation.herramientas?.categoria}
+
+                      {/* Información adicional */}
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className={`font-medium ${isOverdue ? 'text-red-700' : 'text-secondary-700'}`}>Categoría:</span>
+                          <p className={isOverdue ? 'text-red-600' : 'text-secondary-600'}>{reservation.herramientas?.categoria}</p>
+                        </div>
+                        
+                        <div>
+                          <span className={`font-medium ${isOverdue ? 'text-red-700' : 'text-secondary-700'}`}>Serial:</span>
+                          <p className={`font-mono text-xs ${isOverdue ? 'text-red-600' : 'text-secondary-600'}`}>{reservation.herramientas?.serial}</p>
+                        </div>
+                        
+                        <div>
+                          <span className={`font-medium ${isOverdue ? 'text-red-700' : 'text-secondary-700'}`}>Fecha Reserva:</span>
+                          <p className={isOverdue ? 'text-red-600' : 'text-secondary-600'}>{formatDate(reservation.fecha_reserva)}</p>
+                        </div>
+                        
+                        <div>
+                          <span className={`font-medium ${isOverdue ? 'text-red-700' : 'text-secondary-700'}`}>
+                            {reservation.estado === 'devuelta' ? 'Fecha Devolución:' : 'Fecha Estimada:'}
+                          </span>
+                          <p className={`${isOverdue ? 'text-red-600 font-semibold' : 'text-secondary-600'}`}>
+                            {reservation.fecha_devolucion_real 
+                              ? formatDate(reservation.fecha_devolucion_real)
+                              : formatDate(reservation.fecha_devolucion_estimada)
+                            }
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-secondary-900">
-                    {reservation.empleados?.nombre_completo}
-                  </div>
-                  <div className="text-sm text-secondary-500">
-                    {reservation.empleados?.cargo}
-                  </div>
-                  <div className="text-xs text-secondary-400">
-                    ID: {reservation.empleados?.identificacion}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
-                  <div>
-                    <div className="font-medium">Reserva:</div>
-                    <div className="text-xs text-secondary-500">
-                      {formatDate(reservation.fecha_reserva)}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <div className="font-medium">Est. Devolución:</div>
-                    <div className="text-xs text-secondary-500">
-                      {formatDate(reservation.fecha_devolucion_estimada)}
-                    </div>
-                  </div>
-                  {reservation.fecha_devolucion_real && (
-                    <div className="mt-2">
-                      <div className="font-medium">Devuelta:</div>
-                      <div className="text-xs text-secondary-500">
-                        {formatDate(reservation.fecha_devolucion_real)}
-                      </div>
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getStatusBadge(reservation.estado)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getConditionBadge(reservation.condicion)}
-                </td>
-                {hasPermission('almacenista') && (
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
+
+                  {/* Acciones */}
+                  {hasPermission('almacenista') && (
+                    <div className="ml-6 flex-shrink-0 flex space-x-2">
                       {reservation.estado === 'reservada' && (
                         <button
                           onClick={() => onReturn(reservation.id)}
-                          className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                         >
-                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                          <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           Devolver
                         </button>
@@ -213,9 +196,9 @@ const ReservationsList = ({ reservations, onEdit, onDelete, onReturn, hasPermiss
                       
                       <button
                         onClick={() => onEdit(reservation)}
-                        className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        className="inline-flex items-center px-3 py-2 border border-secondary-300 text-sm leading-4 font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       >
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         Editar
@@ -223,97 +206,21 @@ const ReservationsList = ({ reservations, onEdit, onDelete, onReturn, hasPermiss
                       
                       <button
                         onClick={() => onDelete(reservation)}
-                        className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                       >
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                         Eliminar
                       </button>
                     </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-secondary-200 sm:px-6">
-          <div className="flex-1 flex justify-between sm:hidden">
-            <button
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center px-4 py-2 border border-secondary-300 text-sm font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Anterior
-            </button>
-            <button
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="ml-3 relative inline-flex items-center px-4 py-2 border border-secondary-300 text-sm font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Siguiente
-            </button>
-          </div>
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-secondary-700">
-                Mostrando{' '}
-                <span className="font-medium">{startIndex + 1}</span>
-                {' '}a{' '}
-                <span className="font-medium">
-                  {Math.min(endIndex, reservations.length)}
-                </span>
-                {' '}de{' '}
-                <span className="font-medium">{reservations.length}</span>
-                {' '}resultados
-              </p>
-            </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-secondary-300 bg-white text-sm font-medium text-secondary-500 hover:bg-secondary-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="sr-only">Anterior</span>
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-                
-                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                      currentPage === page
-                        ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
-                        : 'bg-white border-secondary-300 text-secondary-500 hover:bg-secondary-50'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
-                
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-secondary-300 bg-white text-sm font-medium text-secondary-500 hover:bg-secondary-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="sr-only">Siguiente</span>
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </nav>
-            </div>
-          </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
-      )}
+      </div>
     </div>
   )
 }

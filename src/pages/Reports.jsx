@@ -18,6 +18,8 @@ const Reports = () => {
     
     // Datos para exportación
     generalStats,
+    overdueReservationsData,
+    alertsData,
     loading,
     error,
     refreshData,
@@ -52,6 +54,29 @@ const Reports = () => {
     )
   }
 
+  // Calcular días promedio de vencimiento
+  const getAverageOverdueDays = () => {
+    if (!overdueReservationsData || overdueReservationsData.length === 0) return 0
+    const totalDays = overdueReservationsData.reduce((sum, reservation) => {
+      const daysOverdue = Math.ceil((new Date() - new Date(reservation.fecha_devolucion_estimada)) / (1000 * 60 * 60 * 24))
+      return sum + daysOverdue
+    }, 0)
+    return Math.round(totalDays / overdueReservationsData.length)
+  }
+
+  // Preparar datos para gráfico de alertas por tipo
+  const alertsByType = alertsData.reduce((acc, alert) => {
+    const type = alert.motivo?.toLowerCase().includes('deterioro') ? 'Deterioro' : 
+                alert.motivo?.toLowerCase().includes('vencida') ? 'Vencidas' : 'General'
+    acc[type] = (acc[type] || 0) + 1
+    return acc
+  }, {})
+
+  const alertsStatsForChart = Object.entries(alertsByType).map(([tipo, total]) => ({
+    tipo,
+    total
+  }))
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -62,6 +87,11 @@ const Reports = () => {
           </h2>
           <p className="mt-1 text-sm text-secondary-500">
             Análisis detallado del uso de herramientas y actividad del taller
+            {generalStats.overdueReservations > 0 && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                {generalStats.overdueReservations} reservas vencidas
+              </span>
+            )}
           </p>
         </div>
         <div className="mt-4 flex space-x-3 md:mt-0 md:ml-4">
@@ -83,6 +113,31 @@ const Reports = () => {
         </div>
       </div>
 
+      {/* Alerta de reservas vencidas */}
+      {generalStats.overdueReservations > 0 && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">
+                Atención: {generalStats.overdueReservations} reserva{generalStats.overdueReservations !== 1 ? 's' : ''} vencida{generalStats.overdueReservations !== 1 ? 's' : ''}
+              </h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>
+                  Se detectaron reservas que no han sido devueltas a tiempo. 
+                  Promedio de retraso: {getAverageOverdueDays()} días. 
+                  Revisa la sección de reservas vencidas para más detalles.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Contenido del reporte - Contenedor principal para exportación */}
       <div id="reports-container" data-reports-content className="space-y-8">
         {/* Header del reporte para exportación */}
@@ -97,6 +152,11 @@ const Reports = () => {
               day: 'numeric' 
             })} por {user?.nombre || user?.email}
           </p>
+          {generalStats.overdueReservations > 0 && (
+            <p className="text-red-600 mt-1 font-medium">
+              ⚠️ Incluye {generalStats.overdueReservations} reserva{generalStats.overdueReservations !== 1 ? 's' : ''} vencida{generalStats.overdueReservations !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
 
         {/* Estadísticas principales en cards */}
@@ -197,13 +257,43 @@ const Reports = () => {
             </div>
           </div>
 
+          {/* Nueva card para reservas vencidas */}
           <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
                   <div className="w-8 h-8 bg-red-100 rounded-md flex items-center justify-center">
                     <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.854-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-secondary-500 truncate">
+                      Reservas Vencidas
+                    </dt>
+                    <dd className="text-lg font-medium text-red-900">
+                      {generalStats.overdueReservations}
+                    </dd>
+                    {generalStats.overdueReservations > 0 && (
+                      <dt className="text-xs text-red-600 mt-1">
+                        Promedio: {getAverageOverdueDays()} días
+                      </dt>
+                    )}
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-orange-100 rounded-md flex items-center justify-center">
+                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-3.5-3.5M9 17H4l3.5-3.5M12 3v18" />
                     </svg>
                   </div>
                 </div>
@@ -259,7 +349,7 @@ const Reports = () => {
             />
           </div>
 
-          {/* Estado de reservas */}
+          {/* Estado de reservas (incluyendo vencidas) */}
           <div className="bg-white p-6 rounded-lg shadow">
             <DoughnutChart
               data={reservationsStats}
@@ -270,15 +360,28 @@ const Reports = () => {
           </div>
         </div>
 
-        {/* Tendencia mensual */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <LineChart
-            data={monthlyStats}
-            title="Tendencia Mensual de Reservas"
-            labelKey="mes"
-            valueKey="total"
-            color="#7C3AED"
-          />
+        {/* Nuevos gráficos de alertas y vencidas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Distribución de alertas por tipo */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <DoughnutChart
+              data={alertsStatsForChart}
+              title="Distribución de Alertas por Tipo"
+              labelKey="tipo"
+              valueKey="total"
+            />
+          </div>
+
+          {/* Tendencia mensual */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <LineChart
+              data={monthlyStats}
+              title="Tendencia Mensual de Reservas"
+              labelKey="mes"
+              valueKey="total"
+              color="#7C3AED"
+            />
+          </div>
         </div>
 
         {/* Tablas de datos detallados */}
@@ -366,6 +469,63 @@ const Reports = () => {
           </div>
         </div>
 
+        {/* Nueva tabla de reservas vencidas */}
+        {overdueReservationsData && overdueReservationsData.length > 0 && (
+          <div className="bg-white shadow rounded-lg overflow-hidden border-l-4 border-red-400">
+            <div className="px-6 py-4 border-b border-secondary-200 bg-red-50">
+              <h3 className="text-lg leading-6 font-medium text-red-900">
+                Reservas Vencidas ({overdueReservationsData.length})
+              </h3>
+              <p className="text-sm text-red-700">
+                Herramientas que no han sido devueltas a tiempo
+              </p>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              <table className="min-w-full divide-y divide-secondary-200">
+                <thead className="bg-red-50 sticky top-0">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-red-700 uppercase tracking-wider">
+                      Empleado
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-red-700 uppercase tracking-wider">
+                      Herramienta
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-red-700 uppercase tracking-wider">
+                      Días Vencida
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-red-700 uppercase tracking-wider">
+                      Fecha Límite
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-secondary-200">
+                  {overdueReservationsData.map((reservation, index) => {
+                    const daysOverdue = Math.ceil((new Date() - new Date(reservation.fecha_devolucion_estimada)) / (1000 * 60 * 60 * 24))
+                    return (
+                      <tr key={index} className="hover:bg-red-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-900">
+                          {reservation.empleados?.nombre_completo}
+                          <div className="text-xs text-red-600">{reservation.empleados?.cargo}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-800">
+                          {reservation.herramientas?.nombre}
+                          <div className="text-xs text-red-600">{reservation.herramientas?.categoria}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-900 font-semibold">
+                          {daysOverdue} día{daysOverdue !== 1 ? 's' : ''}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-800">
+                          {new Date(reservation.fecha_devolucion_estimada).toLocaleDateString('es-ES')}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Footer del reporte */}
         <div className="text-center text-sm text-secondary-500 border-t border-secondary-200 pt-6 print:block hidden">
           <p>
@@ -374,6 +534,11 @@ const Reports = () => {
           <p>
             Generado automáticamente el {new Date().toLocaleString('es-ES')}
           </p>
+          {generalStats.overdueReservations > 0 && (
+            <p className="text-red-600 mt-1">
+              ⚠️ Reporte incluye {generalStats.overdueReservations} reserva{generalStats.overdueReservations !== 1 ? 's' : ''} vencida{generalStats.overdueReservations !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       </div>
     </div>
